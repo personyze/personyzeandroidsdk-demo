@@ -1,6 +1,8 @@
 apply plugin: 'com.android.library'
 
 android {
+    namespace 'com.personyze.personyzeandroidsdk'
+
     compileSdkVersion 30
 
 
@@ -18,10 +20,9 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
+    
 }
 
 dependencies {
-    implementation 'com.android.support:appcompat-v7:28.0.0'
     implementation 'eu.the4thfloor.volley:com.android.volley:2015.05.28'
 }
