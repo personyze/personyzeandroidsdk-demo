@@ -1,0 +1,45 @@
+<resources>
+	<string name="app_name">Personyze SDK Demo</string>
+	<string name="api_key">API Key</string>
+	<string name="nav_title">Simulate navigation to new document</string>
+	<string name="nav_hint">Document name, like Shopping Cart</string>
+	<string name="events_title">Optionally simulate one or several events</string>
+	<string name="user">User</string>
+	<string name="field">Field</string>
+	<string-array name="user_fields">
+		<item>Email</item>
+		<item>First name</item>
+		<item>Last name</item>
+		<item>Phone</item>
+		<item>Custom</item>
+	</string-array>
+	<string-array name="product_or_article">
+		<item>Product</item>
+		<item>Article</item>
+	</string-array>
+	<string-array name="product_status">
+		<item>Viewed</item>
+		<item>To cart</item>
+		<item>Liked</item>
+		<item>Bought</item>
+		<item>From cart</item>
+		<item>Unliked</item>
+	</string-array>
+	<string-array name="article_status">
+		<item>Viewed</item>
+		<item>Commented</item>
+		<item>Liked</item>
+		<item>Goal</item>
+		<item>Unliked</item>
+	</string-array>
+	<string name="products_bought">Products in cart bought</string>
+	<string name="products_from_cart">Empty cart</string>
+	<string name="products_unliked">Unlike all</string>
+	<string name="only_events">Only events</string>
+	<string name="proceed_navigation">Proceed navigation ></string>
+	<string name="start_new_session">Start new session</string>
+	<string name="simulate_activity">Simulate activity</string>
+	<string name="clear_cache">Clear cache</string>
+	<string name="add">Add</string>
+	<string name="get_started">Get started</string>
+</resources>
