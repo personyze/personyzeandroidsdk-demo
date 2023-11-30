@@ -1,31 +1,6 @@
 package com.personyze.androidsdk;
 
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.os.Build;
-import android.provider.Settings;
-import android.util.Base64;
-import android.util.DisplayMetrics;
-import android.util.Log;
-
-import com.android.volley.AuthFailureError;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.json.JSONStringer;
-import org.json.JSONTokener;
-
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -34,6 +9,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.zip.CRC32;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.os.Build;
+import android.provider.Settings;
+import android.util.DisplayMetrics;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONStringer;
+import org.json.JSONTokener;
 
 /**
  * <p>
@@ -73,17 +63,15 @@ public class PersonyzeTracker
 
 	private boolean isInitialized;
 	private Context context;
-	private String apiKey;
-	private String httpAuth;
 	private int userId;
-	private RequestQueue requestQueue;
+	private final PersonyzeHttp http = new PersonyzeHttp(GATEWAY_URL, USER_AGENT);
 	private SharedPreferences storage;
 	private double timeZone;
 	private String language;
 	private String os;
 	private String deviceType;
-	private final ArrayList<String[]> commands = new ArrayList<>(4);
-	private boolean isNavigate = false;
+	private final ArrayList<String[]> commands = new ArrayList<>(8);
+	private boolean isNavigate;
 	private boolean wantNewSession;
 	private String sessionId;
 	private int cacheVersion;
@@ -246,85 +234,6 @@ public class PersonyzeTracker
 		return 0;
 	}
 
-	private void httpFetch(String path, final String postData, final AsyncResult<String> asyncResult)
-	{	if (apiKey != null)
-		{	requestQueue.add
-			(	new StringRequest
-				(	postData==null ? Request.Method.GET : Request.Method.POST,
-					GATEWAY_URL+path,
-					new Response.Listener<String>()
-					{	@Override public void onResponse(String response)
-						{	if (response!=null && response.length()>0)
-							{	asyncResult.success(response);
-							}
-							else
-							{	asyncResult.error(null);
-							}
-						}
-					},
-					new Response.ErrorListener()
-					{	@Override public void onErrorResponse(VolleyError error)
-						{	String message = null;
-							PersonyzeError.Type type = PersonyzeError.Type.OTHER;
-							if (error.networkResponse != null)
-							{	if (error.networkResponse.statusCode == 500)
-								{	type = PersonyzeError.Type.HTTP_500;
-									try
-									{	message = new String(error.networkResponse.data, "utf-8");
-									}
-									catch (UnsupportedEncodingException e)
-									{	// not interesting
-									}
-								}
-								else if (error.networkResponse.statusCode == 503)
-								{	type = PersonyzeError.Type.HTTP_503;
-									message = "Service temporarily unavailable";
-								}
-								else if (error.networkResponse.statusCode == 401)
-								{	type = PersonyzeError.Type.HTTP_401;
-									message = "Invalid API key";
-								}
-							}
-							if (message == null)
-							{	message = error.getLocalizedMessage();
-								if (message == null)
-								{	message = "HTTP request failed";
-								}
-							}
-							asyncResult.error(new PersonyzeError(message, type));
-						}
-					}
-				)
-				{	@Override public String getBodyContentType()
-					{	return "application/json; charset=utf-8";
-					}
-
-					@Override public byte[] getBody() throws AuthFailureError
-					{	if (postData != null)
-						{	try
-							{	return postData.getBytes("utf-8");
-							}
-							catch (UnsupportedEncodingException e)
-							{	throw new AuthFailureError("Encoding problem");
-							}
-						}
-						return null;
-					}
-
-					@Override public Map<String, String> getHeaders()
-					{	HashMap<String, String> params = new HashMap<>();
-						params.put("Authorization", httpAuth);
-						params.put("User-Agent", USER_AGENT);
-						return params;
-					}
-				}
-			);
-		}
-		else
-		{	asyncResult.error(new PersonyzeError("PersonyzeTracker not initialized"));
-		}
-	}
-
 	private void addCommand(String arg1)
 	{	String[] command = new String[1];
 		command[0] = arg1;
@@ -361,7 +270,7 @@ public class PersonyzeTracker
 		synchronized (this)
 		{	try
 			{	doInitialize();
-				if (commands.size()>0 || requireSomeResult && personyzeResult ==null)
+				if (commands.size()>0 || requireSomeResult && personyzeResult==null)
 				{	// Form the POST request that includes session data and commands
 					JSONStringer postJson = new JSONStringer();
 					postJson.object();
@@ -399,7 +308,7 @@ public class PersonyzeTracker
 						queryingResults = asyncResults;
 						wantNewSession = false;
 						// Send the request
-						httpFetch
+						http.fetch
 						(	"tracker-v1",
 							postStr,
 							new AsyncResult<String>()
@@ -565,7 +474,7 @@ public class PersonyzeTracker
 	}
 
 	private void setResult(PersonyzeResult newPersonyzeResult, boolean curIsNavigate, int[] dismissConditions, int[] dismissActions)
-	{	if (curIsNavigate || personyzeResult ==null)
+	{	if (curIsNavigate || personyzeResult==null)
 		{	personyzeResult = newPersonyzeResult;
 		}
 		else
@@ -643,7 +552,7 @@ public class PersonyzeTracker
 						delim = ',';
 					}
 				}
-				httpFetch
+				http.fetch
 				(	sb.toString(),
 					null,
 					new PersonyzeTracker.AsyncResult<String>()
@@ -686,7 +595,7 @@ public class PersonyzeTracker
 						delim = ',';
 					}
 				}
-				httpFetch
+				http.fetch
 				(	sb.toString(),
 					null,
 					new PersonyzeTracker.AsyncResult<String>()
@@ -737,7 +646,7 @@ public class PersonyzeTracker
 								{	asyncResultSplit.success(newPersonyzeResult);
 								}
 								else
-								{	httpFetch
+								{	http.fetch
 									(	loadPlaceholders.toString(),
 										null,
 										new PersonyzeTracker.AsyncResult<String>()
@@ -833,13 +742,8 @@ public class PersonyzeTracker
 		{	if (context == null)
 			{	throw new PersonyzeError("No context given");
 			}
-			if (apiKey==null || apiKey.length()!=40)
-			{	throw new PersonyzeError("API Key must be 40 characters", PersonyzeError.Type.MALFORMED_API_KEY);
-			}
-			String creds = String.format("api:%s", apiKey);
-			httpAuth = "Basic " + Base64.encodeToString(creds.getBytes(), Base64.DEFAULT);
 			userId = getUserId(context);
-			requestQueue = Volley.newRequestQueue(context);
+			http.setContext(context);
 			storage = context.getSharedPreferences("Personyze Tracker", Context.MODE_PRIVATE);
 			timeZone = TimeZone.getDefault().getRawOffset()/(60*60*1000.0);
 			language = context.getResources().getConfiguration().locale.getLanguage();
@@ -856,14 +760,13 @@ public class PersonyzeTracker
 			}
 			blockedActions = new StoredIntMap("Blocked Actions");
 			pastSessions = new PastSessions();
-			apiKeyHash = apiKey.hashCode();
 			personyzeResult = null;
 			isInitialized = true;
 			// restore current state
 			wantNewSession = storage.getBoolean("New Session", false);
 			sessionId = storage.getString("User", null);
 			cacheVersion = storage.getInt("Cache Version", 0);
-			if (storage.getInt("Api Key Hash", 0) != apiKeyHash)
+			if (storage.getInt("Api Key Hash", 0) != http.apiKey.hashCode())
 			{	clearCache(); // delete cached conditions and actions from (possible) different account
 			}
 			PersonyzeResult tr = new PersonyzeResult();
@@ -881,10 +784,10 @@ public class PersonyzeTracker
 	 * @param apiKey Your personal secret key, obtained in the Personyze account.
 	 */
 	public synchronized void initialize(Context context, String apiKey)
-	{	if (this.apiKey==null || !this.apiKey.equals(apiKey))
+	{	if (http.apiKey==null || !http.apiKey.equals(apiKey))
 		{	this.isInitialized = false;
 			this.context = context==null ? null : context.getApplicationContext();
-			this.apiKey = apiKey;
+			http.apiKey = apiKey;
 		}
 	}
 
