@@ -7,6 +7,9 @@ import java.util.Map;
 import android.content.Context;
 import android.util.Base64;
 
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.TaskCompletionSource;
+
 import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -32,12 +35,13 @@ public class PersonyzeHttp
 	{	requestQueue = Volley.newRequestQueue(context);
 	}
 
-	public void fetch(String path, final String postData, final PersonyzeTracker.AsyncResult<String> asyncResult)
-	{	if (apiKey != null)
+	public Task<String> fetch(String path, final String postData)
+	{	final TaskCompletionSource<String> asyncResult = new TaskCompletionSource<>();
+		if (apiKey != null)
 		{	if (!apiKey.equals(apiKeyInUse))
 			{	if (apiKey.length() != 40)
-				{	asyncResult.error(new PersonyzeError("API Key must be 40 characters", PersonyzeError.Type.MALFORMED_API_KEY));
-					return;
+				{	asyncResult.setException(new PersonyzeError("API Key must be 40 characters", PersonyzeError.Type.MALFORMED_API_KEY));
+					return asyncResult.getTask();
 				}
 				apiKeyInUse = apiKey;
 				String creds = "api:" + apiKeyInUse;
@@ -50,10 +54,10 @@ public class PersonyzeHttp
 					new Response.Listener<String>()
 					{	@Override public void onResponse(String response)
 						{	if (response!=null && response.length()>0)
-							{	asyncResult.success(response);
+							{	asyncResult.setResult(response);
 							}
 							else
-							{	asyncResult.error(null);
+							{	asyncResult.setException(null);
 							}
 						}
 					},
@@ -86,7 +90,7 @@ public class PersonyzeHttp
 								{	message = "HTTP request failed";
 								}
 							}
-							asyncResult.error(new PersonyzeError(message, type));
+							asyncResult.setException(new PersonyzeError(message, type));
 						}
 					}
 				)
@@ -116,7 +120,8 @@ public class PersonyzeHttp
 			);
 		}
 		else
-		{	asyncResult.error(new PersonyzeError("PersonyzeTracker not initialized"));
+		{	asyncResult.setException(new PersonyzeError("PersonyzeTracker not initialized"));
 		}
+		return asyncResult.getTask();
 	}
 }

@@ -19,6 +19,11 @@ import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -307,13 +312,14 @@ public class PersonyzeTracker
 						queryingResults = asyncResults;
 						wantNewSession = false;
 						// Send the request
-						http.fetch
-						(	"tracker-v1",
-							postStr,
-							new AsyncResult<String>()
-							{	@Override public void success(String text)
+						http.fetch("tracker-v1", postStr).addOnCompleteListener
+						(	new OnCompleteListener<String>()
+							{	@Override public void onComplete(@NonNull Task<String> task)
 								{	try
-									{	JSONObject object = (JSONObject)new JSONTokener(text).nextValue();
+									{	if (!task.isSuccessful())
+										{	throw task.getException();
+										}
+										JSONObject object = (JSONObject)new JSONTokener(task.getResult()).nextValue();
 										String rSessionId = object.isNull("session_id") ? null : object.getString("session_id");
 										int rCacheVersion = object.getInt("cache_version");
 										JSONArray rConditions = object.getJSONArray("conditions");
@@ -420,11 +426,10 @@ public class PersonyzeTracker
 									{	queryingResults = null;
 										asyncResults.error(error);
 									}
-								}
-
-								@Override public void error(PersonyzeError error)
-								{	queryingResults = null;
-									asyncResults.error(error);
+									catch (Exception error)
+									{	queryingResults = null;
+										asyncResults.error(new PersonyzeError(error.getLocalizedMessage()));
+									}
 								}
 							}
 						);
@@ -551,13 +556,14 @@ public class PersonyzeTracker
 						delim = ',';
 					}
 				}
-				http.fetch
-				(	sb.toString(),
-					null,
-					new PersonyzeTracker.AsyncResult<String>()
-					{	@Override public void success(String text)
+				http.fetch(sb.toString(), null).addOnCompleteListener
+				(	new OnCompleteListener<String>()
+					{	@Override public void onComplete(@NonNull Task<String> task)
 						{	try
-							{	JSONArray array = (JSONArray)new JSONTokener(text).nextValue();
+							{	if (!task.isSuccessful())
+								{	throw task.getException();
+								}
+								JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
 								for (int i=0, i_end=array.length(); i<i_end; i++)
 								{	JSONObject row = array.getJSONObject(i);
 									int id = row.getInt("id");
@@ -575,10 +581,9 @@ public class PersonyzeTracker
 							catch (JSONException e)
 							{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
 							}
-						}
-
-						@Override public void error(PersonyzeError error)
-						{	asyncResultSplit.error(error);
+							catch (Exception e)
+							{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
+							}
 						}
 					}
 				);
@@ -594,14 +599,15 @@ public class PersonyzeTracker
 						delim = ',';
 					}
 				}
-				http.fetch
-				(	sb.toString(),
-					null,
-					new PersonyzeTracker.AsyncResult<String>()
-					{	@Override public void success(String text)
+				http.fetch(sb.toString(), null).addOnCompleteListener
+				(	new OnCompleteListener<String>()
+					{	@Override public void onComplete(@NonNull Task<String> task)
 						{	try
-							{	StringBuilder loadPlaceholders = null;
-								JSONArray array = (JSONArray)new JSONTokener(text).nextValue();
+							{	if (!task.isSuccessful())
+								{	throw task.getException();
+								}
+								StringBuilder loadPlaceholders = null;
+								JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
 								for (int i=0, i_end=array.length(); i<i_end; i++)
 								{	JSONObject row = array.getJSONObject(i);
 									int id = row.getInt("id");
@@ -645,13 +651,14 @@ public class PersonyzeTracker
 								{	asyncResultSplit.success(newPersonyzeResult);
 								}
 								else
-								{	http.fetch
-									(	loadPlaceholders.toString(),
-										null,
-										new PersonyzeTracker.AsyncResult<String>()
-										{	@Override public void success(String text)
+								{	http.fetch(loadPlaceholders.toString(), null).addOnCompleteListener
+									(	new OnCompleteListener<String>()
+										{	@Override public void onComplete(@NonNull Task<String> task)
 											{	try
-												{	JSONArray array = (JSONArray)new JSONTokener(text).nextValue();
+												{	if (!task.isSuccessful())
+													{	throw task.getException();
+													}
+													JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
 													for (int i=0, i_end=array.length(); i<i_end; i++)
 													{	JSONObject row = array.getJSONObject(i);
 														int id = row.getInt("id");
@@ -677,10 +684,9 @@ public class PersonyzeTracker
 												catch (JSONException e)
 												{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
 												}
-											}
-
-											@Override public void error(PersonyzeError error)
-											{	asyncResultSplit.error(error);
+												catch (Exception e)
+												{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
+												}
 											}
 										}
 									);
@@ -689,10 +695,9 @@ public class PersonyzeTracker
 							catch (JSONException e)
 							{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
 							}
-						}
-
-						@Override public void error(PersonyzeError error)
-						{	asyncResultSplit.error(error);
+							catch (Exception e)
+							{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
+							}
 						}
 					}
 				);
