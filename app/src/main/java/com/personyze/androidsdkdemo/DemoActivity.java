@@ -98,7 +98,7 @@ public class DemoActivity extends AppCompatActivity
 		final String apiKey = getIntent().getStringExtra(MainActivity.EXTRA_API_KEY);
 
 		// Initialize the Personyze tracker. We need to do this before calling other PersonyzeTracker.inst.* methods.
-		PersonyzeTracker.inst.initialize(this, apiKey);
+		PersonyzeTracker.inst.initialize(apiKey);
 
 		// spinnerUserField
 		final Spinner spinnerUserField = findViewById(R.id.spinnerUserField);
@@ -165,7 +165,7 @@ public class DemoActivity extends AppCompatActivity
 	/// You clicked "Start new session".
 	public void clickedNewSession(View view)
 	{	// I call tracker API
-		PersonyzeTracker.inst.startNewSession();
+		PersonyzeTracker.inst.startNewSession(this);
 		setResultRows(new ArrayList<ResultRow>());
 	}
 
@@ -173,7 +173,7 @@ public class DemoActivity extends AppCompatActivity
 	public void clickedClearCache(View view)
 	{	try
 		{	// I call tracker API
-			PersonyzeTracker.inst.clearCache();
+			PersonyzeTracker.inst.clearCache(this);
 		}
 		catch (PersonyzeError error)
 		{	Toast.makeText(this, error.getLocalizedMessage(), Toast.LENGTH_LONG).show();
@@ -323,7 +323,8 @@ public class DemoActivity extends AppCompatActivity
 		findViewById(R.id.loading).setVisibility(View.VISIBLE);
 		findViewById(R.id.buttonNav).setVisibility(View.GONE);
 		PersonyzeTracker.inst.getResult
-		(	new PersonyzeTracker.AsyncResult<PersonyzeResult>()
+		(	this,
+			new PersonyzeTracker.AsyncResult<PersonyzeResult>()
 			{	@Override public void success(PersonyzeResult result)
 				{	// Loaded successfully
 					findViewById(R.id.loading).setVisibility(View.GONE);

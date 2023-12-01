@@ -47,7 +47,7 @@ public class ActionActivity extends AppCompatActivity
 
 		// Initialize the Personyze tracker. We need to do this before calling other PersonyzeTracker.inst.* methods.
 		// It doesn't hurt calling the initializer several times.
-		PersonyzeTracker.inst.initialize(this, apiKey);
+		PersonyzeTracker.inst.initialize(apiKey);
 
 		// Save html to file to find it in debugger. You can see what exactly Personyze is presenting in webView
 		try
@@ -68,12 +68,13 @@ public class ActionActivity extends AppCompatActivity
 		{	// This method renders the action html on provided WebView object.
 			// Also it installs event listeners to sensitive regions inside the html, such as [x] (close) button, hyperlinks, and product cells.
 			action.renderOnWebView
-			(	webView,
+			(	this,
+				webView,
 				new PersonyzeTracker.Async<PersonyzeAction.Clicked>()
 				{	@Override public void callback(final PersonyzeAction.Clicked clicked)
 					{	// Got event. This means that you clicked some sensitive region
 						// I report this event to Personyze. So there will be CTR and close-rate statistics, and widget contribution rate (products bought from this action)
-						PersonyzeTracker.inst.reportActionClicked(clicked);
+						PersonyzeTracker.inst.reportActionClicked(ActionActivity.this, clicked);
 						// Also i show the event on screen
 						((TextView)findViewById(R.id.textStatus)).setText(String.format("clicked=%s; arg=%s; href=%s", clicked.status, clicked.arg, clicked.href));
 					}

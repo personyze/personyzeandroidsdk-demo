@@ -39,11 +39,11 @@ import org.json.JSONTokener;
  *     See the methods of this object to full list of available operations.
  * </p>
  * <p>
- *     After sequence of calls, you can {@link #getResult(AsyncResult)} to see what Campaigns become matching
+ *     After sequence of calls, you can {@link #getResult(Context, AsyncResult)} to see what Campaigns become matching
  *     and what content to present in your application.
  * </p>
  * <p>
- *     If you don't need the result, so don't call {@link #getResult(AsyncResult)}, call {@link #done()} after you're done.
+ *     If you don't need the result, so don't call {@link #getResult(Context, AsyncResult)}, call {@link #done(Context)} after you're done.
  *     This sends pending requests to Personyze server.
  * </p>
  */
@@ -62,7 +62,6 @@ public class PersonyzeTracker
 	}
 
 	private boolean isInitialized;
-	private Context context;
 	private int userId;
 	private final PersonyzeHttp http = new PersonyzeHttp(GATEWAY_URL, USER_AGENT);
 	private SharedPreferences storage;
@@ -217,7 +216,7 @@ public class PersonyzeTracker
 	}
 
 	private static int getUserId(Context context)
-	{   String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+	{   String androidId = Settings.Secure.getString(context.getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
 		CRC32 crc = new CRC32();
 		crc.update(androidId.getBytes());
 		return (int)crc.getValue();
@@ -264,12 +263,12 @@ public class PersonyzeTracker
 		commands.add(command);
 	}
 
-	private void flush(boolean requireSomeResult, boolean isStartNewSession, final AsyncResult<PersonyzeResult> asyncResult)
+	private void flush(Context context, boolean requireSomeResult, boolean isStartNewSession, final AsyncResult<PersonyzeResult> asyncResult)
 	{	PersonyzeError returnError = null;
 		PersonyzeResult returnPersonyzeResult = null;
 		synchronized (this)
 		{	try
-			{	doInitialize();
+			{	doInitialize(context);
 				if (commands.size()>0 || requireSomeResult && personyzeResult==null)
 				{	// Form the POST request that includes session data and commands
 					JSONStringer postJson = new JSONStringer();
@@ -344,7 +343,7 @@ public class PersonyzeTracker
 												pastSessions.add(rSessionStartTime);
 											}
 											if (wantClearCache)
-											{	clearCache(); // sets editor.putString("User", sessionId)
+											{	clearCache(context); // sets editor.putString("User", sessionId)
 											}
 											else if (isNewSession)
 											{	SharedPreferences.Editor editor = storage.edit();
@@ -410,7 +409,7 @@ public class PersonyzeTracker
 										// done
 										loadWhatNeededThenSetResult(newPersonyzeResult, curIsNavigate, dismissConditions, dismissActions, loadConditions || wantClearCache && newPersonyzeResult.conditions.size()>0, loadActions || wantClearCache && newPersonyzeResult.actions.size()>0, wantClearCache, asyncResults);
 										if (hasCommandsAdded)
-										{	flush(false, false, null);
+										{	flush(context, false, false, null);
 										}
 									}
 									catch (JSONException e)
@@ -703,11 +702,12 @@ public class PersonyzeTracker
 
 	/**
 	 * Send Action Status to Personyze. When you show executed actions, you can report that user clicked on a click target (button), or closed that action.
-	 * @param actionId The action ID. Get it from PersonyzeAction object, from "id" property.
+	 * @param context The context of your application (usually an Activity).
+     * @param actionId The action ID. Get it from PersonyzeAction object, from "id" property.
 	 * @param status One of: "target", "close", "product", "article" or "error". 1. "target" means user clicked the destination button. In this case "arg" will be ignored. 2. "close" - user chosen to dismiss this action. "arg" is number of sessions not to show again. 3. "product" - user clicked on a product in a recommendation widget. "arg" is product internal ID. 4. "article" is like "product". 5. "error" - you rejected to show this action to user. "arg" is reason message (will appear in visits dashboard).
 	 * @param arg See "status".
 	 */
-	void reportActionStatus(int actionId, String status, String arg)
+	void reportActionStatus(Context context, int actionId, String status, String arg)
 	{	if (actionId>0 && status!=null && status.length()>0)
 		{	synchronized (this)
 			{	String actionIdStr = ""+actionId;
@@ -733,11 +733,11 @@ public class PersonyzeTracker
 					}
 				}
 			}
-			flush(false, false, null);
+			flush(context, false, false, null);
 		}
 	}
 
-	private void doInitialize() throws PersonyzeError
+	private void doInitialize(Context context) throws PersonyzeError
 	{	if (!isInitialized)
 		{	if (context == null)
 			{	throw new PersonyzeError("No context given");
@@ -767,7 +767,7 @@ public class PersonyzeTracker
 			sessionId = storage.getString("User", null);
 			cacheVersion = storage.getInt("Cache Version", 0);
 			if (storage.getInt("Api Key Hash", 0) != http.apiKey.hashCode())
-			{	clearCache(); // delete cached conditions and actions from (possible) different account
+			{	clearCache(context); // delete cached conditions and actions from (possible) different account
 			}
 			PersonyzeResult tr = new PersonyzeResult();
 			if (tr.fromStorage(storage, context))
@@ -780,13 +780,11 @@ public class PersonyzeTracker
 
 	/**
 	 * Initialize the tracker. This is required before calling any other methods. Typically you need to call this once. Second call with the same apiKey will do nothing.
-	 * @param context The context of your application (usually an Activity).
 	 * @param apiKey Your personal secret key, obtained in the Personyze account.
 	 */
-	public synchronized void initialize(Context context, String apiKey)
+	public synchronized void initialize(String apiKey)
 	{	if (http.apiKey==null || !http.apiKey.equals(apiKey))
 		{	this.isInitialized = false;
-			this.context = context==null ? null : context.getApplicationContext();
 			http.apiKey = apiKey;
 		}
 	}
@@ -983,43 +981,47 @@ public class PersonyzeTracker
 
 	/**
 	 * When you call action.renderOnWebView(), it generates click events when user taps goal/close buttons in action HTML. If your application processes that events (e.g. closes action), you need to report this to Personyze, so you will have CTR and close-rate statistics.
-	 * @param clicked Object that action.renderOnWebView() gives you.
+	 * @param context The context of your application (usually an Activity).
+     * @param clicked Object that action.renderOnWebView() gives you.
 	 */
-	public void reportActionClicked(PersonyzeAction.Clicked clicked)
+	public void reportActionClicked(Context context, PersonyzeAction.Clicked clicked)
 	{	if (clicked != null)
-		{	reportActionStatus(clicked.actionId, clicked.status, clicked.arg);
+		{	reportActionStatus(context, clicked.actionId, clicked.status, clicked.arg);
 		}
 	}
 
 	/**
 	 * What conditions are matching, and what actions are to be presented. This will send pending events to Personyze. This library remembers (stores to memory) the result, and until you call startNewSession(), you can get current result, even after object recreation.
-	 * @param asyncResult Callback.
+	 * @param context The context of your application (usually an Activity).
+     * @param asyncResult Callback.
 	 */
-	public void getResult(final AsyncResult<PersonyzeResult> asyncResult)
-	{	flush(true, false, asyncResult);
+	public void getResult(Context context, final AsyncResult<PersonyzeResult> asyncResult)
+	{	flush(context, true, false, asyncResult);
 	}
 
 	/**
 	 * This asks Personyze to start new session for current user. For each user Personyze counts number of sessions.
 	 * Call this when user closes and reopens the application. Each session lasts not more than 1.5 hours, so it will
 	 * restart after this period automatically.
-	 */
-	public void startNewSession()
-	{	flush(false, true, null);
+	 * @param context The context of your application (usually an Activity).
+     */
+	public void startNewSession(Context context)
+	{	flush(context, false, true, null);
 	}
 
 	/**
 	 * Call this at last. This method sends pending events to Personyze.
-	 */
-	public void done()
-	{	flush(false, false, null);
+	 * @param context The context of your application (usually an Activity).
+     */
+	public void done(Context context)
+	{	flush(context, false, false, null);
 	}
 
 	/**
 	 * Normally you don't need to call this.
 	 */
-	public synchronized void clearCache() throws PersonyzeError
-	{	doInitialize();
+	public synchronized void clearCache(Context context) throws PersonyzeError
+	{	doInitialize(context);
 		if (storage == null)
 		{	throw new PersonyzeError("PersonyzeTracker not initialized");
 		}
