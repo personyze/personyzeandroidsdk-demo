@@ -211,12 +211,12 @@ public class PersonyzeAction implements Serializable
 	{	renderOnWebView(context, webView, null);
 	}
 
-	public void renderOnWebView(Context context, WebView webView, final PersonyzeTracker.Async<Clicked> asyncClicked)
+	public void renderOnWebView(Context context, WebView webView, final PersonyzeTracker.Callback<Clicked> callbackClicked)
 	{	final String html = getContentHtmlDoc();
 		if (html != null)
 		{	final int actionId = id;
 			webView.getSettings().setJavaScriptEnabled(true);
-			if (asyncClicked != null)
+			if (callbackClicked != null)
 			{	webView.removeJavascriptInterface("personyze_message_handler");
 				webView.addJavascriptInterface
 				(	new PersonyzeMessageHandler()
@@ -231,7 +231,7 @@ public class PersonyzeAction implements Serializable
 								new Handler(Looper.getMainLooper()).post
 								(	new Runnable()
 									{	@Override public void run()
-										{	asyncClicked.callback(clicked);
+										{	callbackClicked.callback(clicked);
 										}
 									}
 								);

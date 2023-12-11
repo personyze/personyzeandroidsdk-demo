@@ -89,7 +89,7 @@ public class PersonyzeTracker
 	public static final PersonyzeTracker inst = new PersonyzeTracker();
 	private PersonyzeTracker() {}
 
-	public interface Async<T>
+	public interface Callback<T>
 	{	void callback(T value);
 	}
 
