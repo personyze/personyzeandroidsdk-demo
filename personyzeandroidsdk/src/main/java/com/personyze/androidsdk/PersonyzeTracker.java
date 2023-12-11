@@ -21,8 +21,9 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Continuation;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.TaskCompletionSource;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -44,11 +45,11 @@ import org.json.JSONTokener;
  *     See the methods of this object to full list of available operations.
  * </p>
  * <p>
- *     After sequence of calls, you can {@link #getResult(Context, AsyncResult)} to see what Campaigns become matching
+ *     After sequence of calls, you can {@link #getResult(Context)} to see what Campaigns become matching
  *     and what content to present in your application.
  * </p>
  * <p>
- *     If you don't need the result, so don't call {@link #getResult(Context, AsyncResult)}, call {@link #done(Context)} after you're done.
+ *     If you don't need the result, so don't call {@link #getResult(Context)}, call {@link #done(Context)} after you're done.
  *     This sends pending requests to Personyze server.
  * </p>
  */
@@ -66,7 +67,6 @@ public class PersonyzeTracker
 	{	DONT_SHOW_AGAIN, PRESENTING_RULES
 	}
 
-	private boolean isInitialized;
 	private int userId;
 	private final PersonyzeHttp http = new PersonyzeHttp(GATEWAY_URL, USER_AGENT);
 	private SharedPreferences storage;
@@ -81,58 +81,13 @@ public class PersonyzeTracker
 	private int cacheVersion;
 	private int apiKeyHash;
 	private PersonyzeResult personyzeResult;
-	private AsyncResultSplit<PersonyzeResult> queryingResults;
+	private Task<PersonyzeResult> queryingResults;
 	private StoredIntMap blockedActions;
 	private PastSessions pastSessions;
 
 	// Singleton
 	public static final PersonyzeTracker inst = new PersonyzeTracker();
 	private PersonyzeTracker() {}
-
-	private static class AsyncResultSplit<T> implements AsyncResult<T>
-	{	private final ArrayList<AsyncResult<T>> queue;
-		private final int nTimes;
-		private int n;
-		private PersonyzeError error;
-
-		public AsyncResultSplit(int nTimes, AsyncResult<T> asyncResult)
-		{	this.nTimes = nTimes;
-			queue = new ArrayList<>(1);
-			add(asyncResult);
-		}
-
-		void add(AsyncResult<T> asyncResult)
-		{	if (asyncResult != null)
-			{	queue.add(asyncResult);
-			}
-		}
-
-		@Override public void success(T result)
-		{	if (++n == nTimes)
-			{	for (AsyncResult<T> r : queue)
-				{	if (error != null)
-					{	r.error(error);
-					}
-					else
-					{	r.success(result);
-					}
-				}
-				if (error!=null && queue.size()==0)
-				{	Log.e("Personyze", error.getLocalizedMessage());
-				}
-			}
-		}
-
-		@Override public void error(PersonyzeError error)
-		{	this.error = error;
-			success(null);
-		}
-	}
-
-	public interface AsyncResult<T>
-	{	void success(T result);
-		void error(PersonyzeError error);
-	}
 
 	public interface Async<T>
 	{	void callback(T value);
@@ -268,213 +223,200 @@ public class PersonyzeTracker
 		commands.add(command);
 	}
 
-	private void flush(Context context, boolean requireSomeResult, boolean isStartNewSession, final AsyncResult<PersonyzeResult> asyncResult)
-	{	PersonyzeError returnError = null;
-		PersonyzeResult returnPersonyzeResult = null;
-		synchronized (this)
-		{	try
-			{	doInitialize(context);
-				if (commands.size()>0 || requireSomeResult && personyzeResult==null)
-				{	// Form the POST request that includes session data and commands
-					JSONStringer postJson = new JSONStringer();
-					postJson.object();
-					postJson.key("user_id").value(userId);
-					postJson.key("session_id").value(sessionId);
-					postJson.key("new_session").value(wantNewSession || sessionId==null || intVal(sessionId)+90*60-5 <= System.currentTimeMillis()/1000); // sessionId contains information that Personyze server wants me to store and send him back. The only thing he promises me is that there is sessionStartTime in the beginning
-					postJson.key("past_sessions").value(pastSessions.value);
-					postJson.key("platform").value(PLATFORM);
-					postJson.key("time_zone").value(timeZone);
-					postJson.key("languages").value(language);
-					DisplayMetrics m = Resources.getSystem().getDisplayMetrics();
-					postJson.key("screen").value(String.format(Locale.US, "%dx%d", m.widthPixels, m.heightPixels));
-					postJson.key("os").value(os);
-					postJson.key("device_type").value(deviceType);
-					postJson.key("commands").array();
-					for (String[] command : commands)
-					{	postJson.array();
-						for (String arg : command)
-						{	postJson.value(arg);
+	private Task<PersonyzeResult> flush(Context context, boolean requireSomeResult, boolean isStartNewSession)
+	{	queryingResults = doInitialize(context).continueWithTask
+		(	new Continuation<PersonyzeResult, Task<PersonyzeResult>>()
+			{	@Override public Task<PersonyzeResult> then(@NonNull Task<PersonyzeResult> task) throws Exception
+				{	if (!task.isSuccessful())
+					{	throw task.getException();
+					}
+					final boolean curIsNavigate = isNavigate;
+					String postStr = null;
+					try
+					{	if (commands.size()>0 || requireSomeResult && personyzeResult==null)
+						{	// Form the POST request that includes session data and commands
+							JSONStringer postJson = new JSONStringer();
+							postJson.object();
+							postJson.key("user_id").value(userId);
+							postJson.key("session_id").value(sessionId);
+							postJson.key("new_session").value(wantNewSession || sessionId==null || intVal(sessionId)*1000L + 90*60*1000 - 5000 <= System.currentTimeMillis()); // sessionId contains information that Personyze server wants me to store and send him back. The only thing he promises me is that there is sessionStartTime in the beginning
+							postJson.key("past_sessions").value(pastSessions.value);
+							postJson.key("platform").value(PLATFORM);
+							postJson.key("time_zone").value(timeZone);
+							postJson.key("languages").value(language);
+							DisplayMetrics m = Resources.getSystem().getDisplayMetrics();
+							postJson.key("screen").value(String.format(Locale.US, "%dx%d", m.widthPixels, m.heightPixels));
+							postJson.key("os").value(os);
+							postJson.key("device_type").value(deviceType);
+							postJson.key("commands").array();
+							for (String[] command : commands)
+							{	postJson.array();
+								for (String arg : command)
+								{	postJson.value(arg);
+								}
+								postJson.endArray();
+							}
+							postJson.endArray();
+							postJson.endObject();
+							postStr = postJson.toString();
+							commands.clear(); // delete commands that are about to be sent (to avoid sending twice)
+							if (postStr.length() > POST_LIMIT)
+							{	throw new PersonyzeError("Request was too big", PersonyzeError.Type.REQUEST_TOO_BIG);
+							}
+							isNavigate = false;
+							wantNewSession = false;
 						}
-						postJson.endArray();
 					}
-					postJson.endArray();
-					postJson.endObject();
-					String postStr = postJson.toString();
-					commands.clear(); // delete commands that are about to be sent (to avoid sending twice)
-					if (postStr.length() > POST_LIMIT)
-					{	returnError = new PersonyzeError("Request was too big", PersonyzeError.Type.REQUEST_TOO_BIG);
-					}
-					else
-					{	final boolean curIsNavigate = isNavigate;
+					catch (JSONException e)
+					{	commands.clear(); // discard failed commands
 						isNavigate = false;
-						// Further getResult() must use new object
-						final AsyncResultSplit<PersonyzeResult> asyncResults = new AsyncResultSplit<>(1, asyncResult);
-						queryingResults = asyncResults;
-						wantNewSession = false;
-						// Send the request
-						http.fetch("tracker-v1", postStr).addOnCompleteListener
-						(	new OnCompleteListener<String>()
-							{	@Override public void onComplete(@NonNull Task<String> task)
-								{	try
-									{	if (!task.isSuccessful())
-										{	throw task.getException();
+						final TaskCompletionSource<PersonyzeResult> asyncResult = new TaskCompletionSource<>();
+						asyncResult.setException(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
+						return asyncResult.getTask();
+					}
+					catch (PersonyzeError e)
+					{	final TaskCompletionSource<PersonyzeResult> asyncResult = new TaskCompletionSource<>();
+						asyncResult.setException(e);
+						return asyncResult.getTask();
+					}
+					if (isStartNewSession)
+					{	wantNewSession = true;
+						personyzeResult = null;
+						SharedPreferences.Editor editor = storage.edit();
+						editor.putBoolean("New Session", true);
+						editor.remove("Conditions");
+						editor.remove("Actions");
+						editor.apply();
+					}
+					if (postStr == null)
+					{	// Nothing to send, just get current result
+						final TaskCompletionSource<PersonyzeResult> asyncResult = new TaskCompletionSource<>();
+						asyncResult.setResult(personyzeResult);
+						return asyncResult.getTask();
+					}
+					// Send the request
+                    return http.fetch("tracker-v1", postStr).continueWithTask
+					(	new Continuation<String, Task<PersonyzeResult>>()
+						{	@Override public Task<PersonyzeResult> then(@NonNull Task<String> task) throws Exception
+							{	try
+								{	if (!task.isSuccessful())
+									{	throw task.getException();
+									}
+									JSONObject object = (JSONObject)new JSONTokener(task.getResult()).nextValue();
+									String rSessionId = object.isNull("session_id") ? null : object.getString("session_id");
+									int rCacheVersion = object.getInt("cache_version");
+									JSONArray rConditions = object.getJSONArray("conditions");
+									JSONArray rActions = object.getJSONArray("actions");
+									JSONArray rDismissConditions = object.getJSONArray("dismiss_conditions");
+									JSONArray rDismissActions = object.getJSONArray("dismiss_actions");
+									// vars
+									boolean wantClearCache;
+									boolean loadConditions = false;
+									boolean loadActions = false;
+									PersonyzeResult newPersonyzeResult = new PersonyzeResult();
+									boolean hasCommandsAdded = false;
+									if (rSessionId == null)
+									{	rSessionId = sessionId;
+									}
+									if (rCacheVersion == 0)
+									{	rCacheVersion = cacheVersion;
+									}
+									wantClearCache = rCacheVersion > cacheVersion;
+									cacheVersion = rCacheVersion;
+									int rSessionStartTime = intVal(rSessionId);
+									boolean isNewSession = rSessionStartTime != intVal(sessionId);
+									sessionId = rSessionId;
+									if (isNewSession)
+									{	blockedActions.dec();
+										pastSessions.add(rSessionStartTime);
+									}
+									if (wantClearCache)
+									{	clearCache(context); // sets editor.putString("User", sessionId)
+									}
+									else if (isNewSession)
+									{	SharedPreferences.Editor editor = storage.edit();
+										editor.putString("User", rSessionId);
+										editor.remove("New Session");
+										editor.apply();
+									}
+									// newPersonyzeResult.conditions
+									newPersonyzeResult.conditions = new ArrayList<>(rConditions.length());
+									for (int i=0, i_end=rConditions.length(); i<i_end; i++)
+									{	object = rConditions.getJSONObject(i);
+										PersonyzeCondition condition = new PersonyzeCondition(object.getInt("id"));
+										if (!wantClearCache && !condition.fromStorage(storage))
+										{	loadConditions = true;
 										}
-										JSONObject object = (JSONObject)new JSONTokener(task.getResult()).nextValue();
-										String rSessionId = object.isNull("session_id") ? null : object.getString("session_id");
-										int rCacheVersion = object.getInt("cache_version");
-										JSONArray rConditions = object.getJSONArray("conditions");
-										JSONArray rActions = object.getJSONArray("actions");
-										JSONArray rDismissConditions = object.getJSONArray("dismiss_conditions");
-										JSONArray rDismissActions = object.getJSONArray("dismiss_actions");
-										// vars
-										boolean wantClearCache;
-										boolean loadConditions = false;
-										boolean loadActions = false;
-										PersonyzeResult newPersonyzeResult = new PersonyzeResult();
-										boolean hasCommandsAdded = false;
-										synchronized (PersonyzeTracker.this)
-										{	if (rSessionId == null)
-											{	rSessionId = sessionId;
-											}
-											if (rCacheVersion == 0)
-											{	rCacheVersion = cacheVersion;
-											}
-											wantClearCache = rCacheVersion > cacheVersion;
-											cacheVersion = rCacheVersion;
-											int rSessionStartTime = intVal(rSessionId);
-											boolean isNewSession = rSessionStartTime != intVal(sessionId);
-											sessionId = rSessionId;
-											if (isNewSession)
-											{	blockedActions.dec();
-												pastSessions.add(rSessionStartTime);
-											}
-											if (wantClearCache)
-											{	clearCache(context); // sets editor.putString("User", sessionId)
-											}
-											else if (isNewSession)
-											{	SharedPreferences.Editor editor = storage.edit();
-												editor.putString("User", rSessionId);
-												editor.remove("New Session");
-												editor.apply();
-											}
-											// newPersonyzeResult.conditions
-											newPersonyzeResult.conditions = new ArrayList<>(rConditions.length());
-											for (int i=0, i_end=rConditions.length(); i<i_end; i++)
-											{	object = rConditions.getJSONObject(i);
-												PersonyzeCondition condition = new PersonyzeCondition(object.getInt("id"));
-												if (!wantClearCache && !condition.fromStorage(storage))
-												{	loadConditions = true;
+										newPersonyzeResult.conditions.add(condition);
+									}
+									// newPersonyzeResult.actions
+									newPersonyzeResult.actions = new ArrayList<>(rActions.length());
+									for (int i=0, i_end=rActions.length(); i<i_end; i++)
+									{	object = rActions.getJSONObject(i);
+										int id = object.getInt("id");
+										if (!blockedActions.containsKey(id))
+										{	HashMap<String, String> data = null;
+											JSONObject jData = object.optJSONObject("data");
+											if (jData != null)
+											{	data = new HashMap<>();
+												Iterator<String> keys = jData.keys();
+												while (keys.hasNext())
+												{	String key = keys.next();
+													data.put(key, jData.getString(key));
 												}
-												newPersonyzeResult.conditions.add(condition);
 											}
-											// newPersonyzeResult.actions
-											newPersonyzeResult.actions = new ArrayList<>(rActions.length());
-											for (int i=0, i_end=rActions.length(); i<i_end; i++)
-											{	object = rActions.getJSONObject(i);
-												int id = object.getInt("id");
-												if (!blockedActions.containsKey(id))
-												{	HashMap<String, String> data = null;
-													JSONObject jData = object.optJSONObject("data");
-													if (jData != null)
-													{	data = new HashMap<>();
-														Iterator<String> keys = jData.keys();
-														while (keys.hasNext())
-														{	String key = keys.next();
-															data.put(key, jData.getString(key));
-														}
-													}
-													PersonyzeAction action = new PersonyzeAction(id, data, rCacheVersion);
-													if (!wantClearCache && !action.fromStorage(storage))
-													{	loadActions = true;
-													}
-													newPersonyzeResult.actions.add(action);
-													// store data, so it will survive application/activity restart
-													try
-													{	action.dataToStorage(context);
-													}
-													catch (IOException e)
-													{	Log.e("Personyze", e.getLocalizedMessage());
-													}
-												}
-												else
-												{	addCommand("Action Status", ""+id, "dont-show");
-													hasCommandsAdded = true;
-												}
+											PersonyzeAction action = new PersonyzeAction(id, data, rCacheVersion);
+											if (!wantClearCache && !action.fromStorage(storage))
+											{	loadActions = true;
+											}
+											newPersonyzeResult.actions.add(action);
+											// store data, so it will survive application/activity restart
+											try
+											{	action.dataToStorage(context);
+											}
+											catch (IOException e)
+											{	Log.e("Personyze", e.getLocalizedMessage());
 											}
 										}
-										// dismissConditions
-										int[] dismissConditions = new int[rDismissConditions.length()];
-										for (int i=0, i_end=rDismissConditions.length(); i<i_end; i++)
-										{	dismissConditions[i] = rDismissConditions.getInt(i);
-										}
-										// dismissActions
-										int[] dismissActions = new int[rDismissActions.length()];
-										for (int i=0, i_end=rDismissActions.length(); i<i_end; i++)
-										{	dismissActions[i] = rDismissActions.getInt(i);
-										}
-										// done
-										loadWhatNeededThenSetResult(newPersonyzeResult, curIsNavigate, dismissConditions, dismissActions, loadConditions || wantClearCache && newPersonyzeResult.conditions.size()>0, loadActions || wantClearCache && newPersonyzeResult.actions.size()>0, wantClearCache, asyncResults);
-										if (hasCommandsAdded)
-										{	flush(context, false, false, null);
+										else
+										{	addCommand("Action Status", ""+id, "dont-show");
+											hasCommandsAdded = true;
 										}
 									}
-									catch (JSONException e)
-									{	queryingResults = null;
-										asyncResults.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
+									// dismissConditions
+									int[] dismissConditions = new int[rDismissConditions.length()];
+									for (int i=0, i_end=rDismissConditions.length(); i<i_end; i++)
+									{	dismissConditions[i] = rDismissConditions.getInt(i);
 									}
-									catch (PersonyzeError error)
-									{	queryingResults = null;
-										asyncResults.error(error);
+									// dismissActions
+									int[] dismissActions = new int[rDismissActions.length()];
+									for (int i=0, i_end=rDismissActions.length(); i<i_end; i++)
+									{	dismissActions[i] = rDismissActions.getInt(i);
 									}
-									catch (Exception error)
-									{	queryingResults = null;
-										asyncResults.error(new PersonyzeError(error.getLocalizedMessage()));
-									}
+									// done
+									final boolean wantFlush = hasCommandsAdded;
+									return loadWhatNeeded(newPersonyzeResult, loadConditions || wantClearCache && newPersonyzeResult.conditions.size()>0, loadActions || wantClearCache && newPersonyzeResult.actions.size()>0, wantClearCache).continueWith
+									(	new Continuation<Void, PersonyzeResult>()
+										{	@Override public PersonyzeResult then(@NonNull Task<Void> task) throws Exception
+											{	setResult(newPersonyzeResult, curIsNavigate, dismissConditions, dismissActions);
+												if (wantFlush)
+												{	flush(context, false, false);
+												}
+												return personyzeResult;
+											}
+										}
+									);
+								}
+								catch (JSONException e)
+								{	throw new PersonyzeError("JSON error: "+e.getLocalizedMessage());
 								}
 							}
-						);
-					}
-				}
-				else if (asyncResult != null)
-				{	// Nothing to send, just get current result
-					if (queryingResults != null)
-					{	queryingResults.add(asyncResult);
-					}
-					else
-					{	returnPersonyzeResult = personyzeResult;
-					}
+						}
+					);
 				}
 			}
-			catch (JSONException e)
-			{	commands.clear(); // discard failed commands
-				isNavigate = false;
-				returnError = new PersonyzeError("JSON error: "+e.getLocalizedMessage());
-			}
-			catch (PersonyzeError e)
-			{	returnError = e;
-			}
-			if (isStartNewSession)
-			{	wantNewSession = true;
-				personyzeResult = null;
-				SharedPreferences.Editor editor = storage.edit();
-				editor.putBoolean("New Session", true);
-				editor.remove("Conditions");
-				editor.remove("Actions");
-				editor.apply();
-			}
-		}
-		// now not synchronized
-		if (returnError != null)
-		{	if (asyncResult != null)
-			{	asyncResult.error(returnError);
-			}
-			else
-			{	Log.e("Personyze", returnError.getLocalizedMessage());
-			}
-		}
-		else if (returnPersonyzeResult != null)
-		{	asyncResult.success(returnPersonyzeResult);
-		}
+		);
+		return queryingResults;
 	}
 
 	private void setResult(PersonyzeResult newPersonyzeResult, boolean curIsNavigate, int[] dismissConditions, int[] dismissActions)
@@ -511,197 +453,186 @@ public class PersonyzeTracker
 		personyzeResult.toStorage(storage);
 	}
 
-	private void loadWhatNeededThenSetResult(final PersonyzeResult newPersonyzeResult, final boolean curIsNavigate, final int[] dismissConditions, final int[] dismissActions, boolean loadConditions, boolean loadActions, final boolean noTryCache, final AsyncResult<PersonyzeResult> asyncResult)
-	{	if (!loadConditions && !loadActions)
-		{	// done
-			PersonyzeResult returnPersonyzeResult;
-			synchronized (this)
-			{	setResult(newPersonyzeResult, curIsNavigate, dismissConditions, dismissActions);
-				queryingResults = null;
-				returnPersonyzeResult = personyzeResult;
+	private Task<Void> loadWhatNeeded(final PersonyzeResult newPersonyzeResult, boolean loadConditions, boolean loadActions, final boolean noTryCache)
+	{	Task<Void> loadConditionsTask = null;
+		Task<Void> loadActionsTask = null;
+		StringBuilder sb = null;
+		if (loadConditions)
+		{	sb = new StringBuilder(200);
+			sb.append("conditions/columns/id,name/where/id");
+			char delim = ':';
+			for (PersonyzeCondition condition : newPersonyzeResult.conditions)
+			{	if (noTryCache || condition.name==null)
+				{	sb.append(delim);
+					sb.append(condition.id);
+					delim = ',';
+				}
 			}
-			asyncResult.success(returnPersonyzeResult);
-		}
-		else
-		{	// need to load conditions/actions or report rejected action
-			final AsyncResultSplit<PersonyzeResult> asyncResultSplit = new AsyncResultSplit<>
-			(	loadConditions  && loadActions ? 2 : 1,
-				new AsyncResult<PersonyzeResult>()
-				{	@Override public void success(PersonyzeResult result)
-					{	PersonyzeResult returnPersonyzeResult;
-						synchronized (PersonyzeTracker.this)
-						{	setResult(newPersonyzeResult, curIsNavigate, dismissConditions, dismissActions);
-							queryingResults = null;
-							returnPersonyzeResult = personyzeResult;
+			loadConditionsTask = http.fetch(sb.toString(), null).continueWith
+			(	new Continuation<String, Void>()
+				{	@Override public Void then(@NonNull Task<String> task) throws Exception
+					{	try
+						{	if (!task.isSuccessful())
+							{	throw task.getException();
+							}
+							JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
+							for (int i=0, i_end=array.length(); i<i_end; i++)
+							{	JSONObject row = array.getJSONObject(i);
+								int id = row.getInt("id");
+								String name = row.getString("name");
+								for (PersonyzeCondition condition : newPersonyzeResult.conditions)
+								{	if (condition.id == id)
+									{	condition.name = name;
+										condition.toStorage(storage);
+										break;
+									}
+								}
+							}
 						}
-						asyncResult.success(returnPersonyzeResult);
-					}
-
-					@Override public void error(PersonyzeError error)
-					{	synchronized (PersonyzeTracker.this)
-						{	queryingResults = null;
+						catch (JSONException e)
+						{	throw new PersonyzeError("JSON error: "+e.getLocalizedMessage());
 						}
-						asyncResult.error(error);
+						return null;
 					}
 				}
 			);
-			StringBuilder sb = new StringBuilder(200);
-			if (loadConditions)
-			{	sb.append("conditions/columns/id,name/where/id");
-				char delim = ':';
-				for (PersonyzeCondition condition : newPersonyzeResult.conditions)
-				{	if (noTryCache || condition.name==null)
-					{	sb.append(delim);
-						sb.append(condition.id);
-						delim = ',';
-					}
-				}
-				http.fetch(sb.toString(), null).addOnCompleteListener
-				(	new OnCompleteListener<String>()
-					{	@Override public void onComplete(@NonNull Task<String> task)
-						{	try
-							{	if (!task.isSuccessful())
-								{	throw task.getException();
-								}
-								JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
-								for (int i=0, i_end=array.length(); i<i_end; i++)
-								{	JSONObject row = array.getJSONObject(i);
-									int id = row.getInt("id");
-									String name = row.getString("name");
-									for (PersonyzeCondition condition : newPersonyzeResult.conditions)
-									{	if (condition.id == id)
-										{	condition.name = name;
-											condition.toStorage(storage);
-											break;
-										}
-									}
-								}
-								asyncResultSplit.success(newPersonyzeResult);
-							}
-							catch (JSONException e)
-							{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
-							}
-							catch (Exception e)
-							{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
-							}
-						}
-					}
-				);
+		}
+		if (loadActions)
+		{	if (sb == null)
+			{	sb = new StringBuilder(200);
 			}
-			if (loadActions)
+			else
 			{	sb.setLength(0);
-				sb.append("actions/columns/id,name,content_type,content_param,content_begin,content_end,libs_app,placeholders/where/id");
-				char delim = ':';
-				for (PersonyzeAction action : newPersonyzeResult.actions)
-				{	if (noTryCache || action.name==null)
-					{	sb.append(delim);
-						sb.append(action.id);
-						delim = ',';
-					}
+			}
+			sb.append("actions/columns/id,name,content_type,content_param,content_begin,content_end,libs_app,placeholders/where/id");
+			char delim = ':';
+			for (PersonyzeAction action : newPersonyzeResult.actions)
+			{	if (noTryCache || action.name==null)
+				{	sb.append(delim);
+					sb.append(action.id);
+					delim = ',';
 				}
-				http.fetch(sb.toString(), null).addOnCompleteListener
-				(	new OnCompleteListener<String>()
-					{	@Override public void onComplete(@NonNull Task<String> task)
-						{	try
-							{	if (!task.isSuccessful())
-								{	throw task.getException();
-								}
-								StringBuilder loadPlaceholders = null;
-								JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
-								for (int i=0, i_end=array.length(); i<i_end; i++)
-								{	JSONObject row = array.getJSONObject(i);
-									int id = row.getInt("id");
-									String name = row.getString("name");
-									String contentType = row.isNull("content_type") ? "" : row.getString("content_type");
-									String contentParam = row.isNull("content_param") ? "" : row.getString("content_param");
-									String contentBegin = row.isNull("content_begin") ? "" : row.getString("content_begin");
-									String contentEnd = row.isNull("content_end") ? "" : row.getString("content_end");
-									String libsApp = row.isNull("libs_app") ? "" : row.getString("libs_app");
-									JSONArray placeholders = row.getJSONArray("placeholders");
-									for (PersonyzeAction action : newPersonyzeResult.actions)
-									{	if (action.id == id)
-										{	action.name = name;
-											action.contentType = contentType;
-											action.contentParam = contentParam;
-											action.contentBegin = contentBegin;
-											action.contentEnd = contentEnd;
-											action.libsApp = libsApp;
-											action.placeholders = new ArrayList<>(placeholders.length());
-											for (int j=0, j_end=placeholders.length(); j<j_end; j++)
-											{	PersonyzePlaceholder placeholder = new PersonyzePlaceholder(placeholders.getInt(j));
-												if (!noTryCache && !placeholder.fromStorage(storage))
-												{	if (loadPlaceholders == null)
-													{	loadPlaceholders = new StringBuilder(128);
-														loadPlaceholders.append("placeholders/columns/id,name,html_id,units_count_max/where/id:");
-														loadPlaceholders.append(placeholder.id);
-													}
-													else
-													{	loadPlaceholders.append(',');
-														loadPlaceholders.append(placeholder.id);
-													}
+			}
+			loadActionsTask = http.fetch(sb.toString(), null).continueWithTask
+			(	new Continuation<String, Task<Void>>()
+				{	@Override public Task<Void> then(@NonNull Task<String> task) throws Exception
+					{	try
+						{	if (!task.isSuccessful())
+							{	throw task.getException();
+							}
+							StringBuilder loadPlaceholders = null;
+							JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
+							for (int i=0, i_end=array.length(); i<i_end; i++)
+							{	JSONObject row = array.getJSONObject(i);
+								int id = row.getInt("id");
+								String name = row.getString("name");
+								String contentType = row.isNull("content_type") ? "" : row.getString("content_type");
+								String contentParam = row.isNull("content_param") ? "" : row.getString("content_param");
+								String contentBegin = row.isNull("content_begin") ? "" : row.getString("content_begin");
+								String contentEnd = row.isNull("content_end") ? "" : row.getString("content_end");
+								String libsApp = row.isNull("libs_app") ? "" : row.getString("libs_app");
+								JSONArray placeholders = row.getJSONArray("placeholders");
+								for (PersonyzeAction action : newPersonyzeResult.actions)
+								{	if (action.id == id)
+									{	action.name = name;
+										action.contentType = contentType;
+										action.contentParam = contentParam;
+										action.contentBegin = contentBegin;
+										action.contentEnd = contentEnd;
+										action.libsApp = libsApp;
+										action.placeholders = new ArrayList<>(placeholders.length());
+										for (int j=0, j_end=placeholders.length(); j<j_end; j++)
+										{	PersonyzePlaceholder placeholder = new PersonyzePlaceholder(placeholders.getInt(j));
+											if (!noTryCache && !placeholder.fromStorage(storage))
+											{	if (loadPlaceholders == null)
+												{	loadPlaceholders = new StringBuilder(128);
+													loadPlaceholders.append("placeholders/columns/id,name,html_id,units_count_max/where/id:");
+													loadPlaceholders.append(placeholder.id);
 												}
-												action.placeholders.add(placeholder);
+												else
+												{	loadPlaceholders.append(',');
+													loadPlaceholders.append(placeholder.id);
+												}
 											}
-											action.toStorage(storage);
-											break;
+											action.placeholders.add(placeholder);
 										}
+										action.toStorage(storage);
+										break;
 									}
 								}
-								if (loadPlaceholders == null)
-								{	asyncResultSplit.success(newPersonyzeResult);
-								}
-								else
-								{	http.fetch(loadPlaceholders.toString(), null).addOnCompleteListener
-									(	new OnCompleteListener<String>()
-										{	@Override public void onComplete(@NonNull Task<String> task)
-											{	try
-												{	if (!task.isSuccessful())
-													{	throw task.getException();
-													}
-													JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
-													for (int i=0, i_end=array.length(); i<i_end; i++)
-													{	JSONObject row = array.getJSONObject(i);
-														int id = row.getInt("id");
-														String name = row.getString("name");
-														String htmlId = row.isNull("html_id") ? "" : row.getString("html_id");
-														int unitsCountMax = row.getInt("units_count_max");
-														for (PersonyzeAction action : newPersonyzeResult.actions)
-														{	if (action.placeholders != null)
-															{	for (PersonyzePlaceholder placeholder : action.placeholders)
-																{	if (placeholder.id == id)
-																	{	placeholder.name = name;
-																		placeholder.htmlId = htmlId;
-																		placeholder.unitsCountMax = unitsCountMax;
-																		placeholder.toStorage(storage);
-																		break;
-																	}
+							}
+							if (loadPlaceholders != null)
+							{	return http.fetch(loadPlaceholders.toString(), null).continueWith
+								(	new Continuation<String, Void>()
+									{	@Override public Void then(@NonNull Task<String> task) throws Exception
+										{	try
+											{	if (!task.isSuccessful())
+												{	throw task.getException();
+												}
+												JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
+												for (int i=0, i_end=array.length(); i<i_end; i++)
+												{	JSONObject row = array.getJSONObject(i);
+													int id = row.getInt("id");
+													String name = row.getString("name");
+													String htmlId = row.isNull("html_id") ? "" : row.getString("html_id");
+													int unitsCountMax = row.getInt("units_count_max");
+													for (PersonyzeAction action : newPersonyzeResult.actions)
+													{	if (action.placeholders != null)
+														{	for (PersonyzePlaceholder placeholder : action.placeholders)
+															{	if (placeholder.id == id)
+																{	placeholder.name = name;
+																	placeholder.htmlId = htmlId;
+																	placeholder.unitsCountMax = unitsCountMax;
+																	placeholder.toStorage(storage);
+																	break;
 																}
 															}
 														}
 													}
-													asyncResultSplit.success(newPersonyzeResult);
-												}
-												catch (JSONException e)
-												{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
-												}
-												catch (Exception e)
-												{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
 												}
 											}
+											catch (JSONException e)
+											{	throw new PersonyzeError("JSON error: "+e.getLocalizedMessage());
+											}
+											return null;
 										}
-									);
-								}
-							}
-							catch (JSONException e)
-							{	asyncResultSplit.error(new PersonyzeError("JSON error: "+e.getLocalizedMessage()));
-							}
-							catch (Exception e)
-							{	asyncResultSplit.error(new PersonyzeError(e.getLocalizedMessage()));
+									}
+								);
 							}
 						}
+						catch (JSONException e)
+						{	throw new PersonyzeError("JSON error: "+e.getLocalizedMessage());
+						}
+						return null;
 					}
-				);
-			}
+				}
+			);
+		}
+		if (loadConditionsTask!=null && loadActionsTask==null)
+		{	return loadConditionsTask;
+		}
+		if (loadConditionsTask==null && loadActionsTask!=null)
+		{	return loadActionsTask;
+		}
+		if (loadConditionsTask == null)
+		{	// both null
+			final TaskCompletionSource<Void> asyncResult = new TaskCompletionSource<>();
+			asyncResult.setResult(null);
+			return asyncResult.getTask();
+		}
+		else
+		{	// both nonnull
+			final Task<Void> finalLoadActionsTask = loadActionsTask;
+			return loadConditionsTask.continueWithTask
+			(	new Continuation<Void, Task<Void>>()
+				{	@Override public Task<Void> then(@NonNull Task<Void> task) throws Exception
+					{	if (!task.isSuccessful())
+						{	throw task.getException();
+						}
+						return finalLoadActionsTask;
+					}
+				}
+			);
 		}
 	}
 
@@ -738,19 +669,34 @@ public class PersonyzeTracker
 					}
 				}
 			}
-			flush(context, false, false, null);
+			flush(context, false, false);
 		}
 	}
 
-	private void doInitialize(Context context) throws PersonyzeError
-	{	if (!isInitialized)
+	private Task<PersonyzeResult> doInitialize(Context context)
+	{	if (queryingResults != null) // already initialized?
+		{	// ignore error in previous request
+			return queryingResults.continueWith
+			(	new Continuation<PersonyzeResult, PersonyzeResult>()
+				{	@Override public PersonyzeResult then(@NonNull Task<PersonyzeResult> task) throws Exception
+					{	if (task.isSuccessful())
+						{	return task.getResult();
+						}
+						return personyzeResult;
+					}
+				}
+			);
+		}
+		final TaskCompletionSource<PersonyzeResult> asyncResult = new TaskCompletionSource<>();
+		queryingResults = asyncResult.getTask(); // set initialized
+		try
 		{	if (context == null)
 			{	throw new PersonyzeError("No context given");
 			}
 			userId = getUserId(context);
 			http.setContext(context);
 			storage = context.getSharedPreferences("Personyze Tracker", Context.MODE_PRIVATE);
-			timeZone = TimeZone.getDefault().getRawOffset()/(60*60*1000.0);
+			timeZone = TimeZone.getDefault().getRawOffset() / (60*60*1000.0);
 			language = context.getResources().getConfiguration().locale.getLanguage();
 			os = String.format("Android/%s (%s)", Build.VERSION.RELEASE, Build.VERSION.CODENAME);
 			if
@@ -766,7 +712,6 @@ public class PersonyzeTracker
 			blockedActions = new StoredIntMap("Blocked Actions");
 			pastSessions = new PastSessions();
 			personyzeResult = null;
-			isInitialized = true;
 			// restore current state
 			wantNewSession = storage.getBoolean("New Session", false);
 			sessionId = storage.getString("User", null);
@@ -778,7 +723,12 @@ public class PersonyzeTracker
 			if (tr.fromStorage(storage, context))
 			{	personyzeResult = tr;
 			}
+			asyncResult.setResult(personyzeResult);
 		}
+		catch (PersonyzeError error)
+		{	asyncResult.setException(error);
+		}
+		return asyncResult.getTask();
 	}
 
 	// MARK: public
@@ -789,7 +739,7 @@ public class PersonyzeTracker
 	 */
 	public synchronized void initialize(String apiKey)
 	{	if (http.apiKey==null || !http.apiKey.equals(apiKey))
-		{	this.isInitialized = false;
+		{	queryingResults = null;
 			http.apiKey = apiKey;
 		}
 	}
@@ -998,10 +948,9 @@ public class PersonyzeTracker
 	/**
 	 * What conditions are matching, and what actions are to be presented. This will send pending events to Personyze. This library remembers (stores to memory) the result, and until you call startNewSession(), you can get current result, even after object recreation.
 	 * @param context The context of your application (usually an Activity).
-     * @param asyncResult Callback.
 	 */
-	public void getResult(Context context, final AsyncResult<PersonyzeResult> asyncResult)
-	{	flush(context, true, false, asyncResult);
+	public Task<PersonyzeResult> getResult(Context context)
+	{	return flush(context, true, false);
 	}
 
 	/**
@@ -1011,7 +960,7 @@ public class PersonyzeTracker
 	 * @param context The context of your application (usually an Activity).
      */
 	public void startNewSession(Context context)
-	{	flush(context, false, true, null);
+	{	flush(context, false, true);
 	}
 
 	/**
@@ -1019,38 +968,57 @@ public class PersonyzeTracker
 	 * @param context The context of your application (usually an Activity).
      */
 	public void done(Context context)
-	{	flush(context, false, false, null);
+	{	flush(context, false, false);
 	}
 
 	/**
 	 * Normally you don't need to call this.
 	 */
-	public synchronized void clearCache(Context context) throws PersonyzeError
-	{	doInitialize(context);
-		if (storage == null)
-		{	throw new PersonyzeError("PersonyzeTracker not initialized");
-		}
-		Set<String> conditions = storage.getStringSet("Conditions", null);
-		Set<String> actions = storage.getStringSet("Actions", null);
-		SharedPreferences.Editor editor = storage.edit();
-		editor.clear();
-		// the following settings don't depend on cacheVersion
-		editor.putInt("Api Key Hash", apiKeyHash);
-		if (wantNewSession)
-		{	editor.putBoolean("New Session", true);
-		}
-		if (sessionId != null)
-		{	editor.putString("User", sessionId);
-		}
-		if (cacheVersion != 0)
-		{	editor.putInt("Cache Version", cacheVersion);
-		}
-		if (conditions != null)
-		{	editor.putStringSet("Conditions", conditions);
-		}
-		if (actions != null)
-		{	editor.putStringSet("Actions", actions);
-		}
-		editor.apply();
+	public Task<Void> clearCache(Context context)
+	{	queryingResults = doInitialize(context).continueWith
+		(	new Continuation<PersonyzeResult, PersonyzeResult>()
+			{	@Override public PersonyzeResult then(@NonNull Task<PersonyzeResult> task) throws Exception
+				{	if (!task.isSuccessful())
+					{	throw task.getException();
+					}
+					if (storage == null)
+					{	throw new PersonyzeError("PersonyzeTracker not initialized");
+					}
+					Set<String> conditions = storage.getStringSet("Conditions", null);
+					Set<String> actions = storage.getStringSet("Actions", null);
+					SharedPreferences.Editor editor = storage.edit();
+					editor.clear();
+					// the following settings don't depend on cacheVersion
+					editor.putInt("Api Key Hash", apiKeyHash);
+					if (wantNewSession)
+					{	editor.putBoolean("New Session", true);
+					}
+					if (sessionId != null)
+					{	editor.putString("User", sessionId);
+					}
+					if (cacheVersion != 0)
+					{	editor.putInt("Cache Version", cacheVersion);
+					}
+					if (conditions != null)
+					{	editor.putStringSet("Conditions", conditions);
+					}
+					if (actions != null)
+					{	editor.putStringSet("Actions", actions);
+					}
+					editor.apply();
+					return task.getResult();
+				}
+			}
+		);
+		return queryingResults.continueWith
+		(	new Continuation<PersonyzeResult, Void>()
+			{	@Override public Void then(@NonNull Task<PersonyzeResult> task) throws Exception
+				{	if (!task.isSuccessful())
+					{	throw task.getException();
+					}
+					return null;
+				}
+			}
+		);
 	}
 }

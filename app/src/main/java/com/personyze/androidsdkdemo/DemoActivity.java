@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.AdapterView;
@@ -17,11 +16,17 @@ import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.Task;
+
 import com.personyze.androidsdk.PersonyzeAction;
 import com.personyze.androidsdk.PersonyzeCondition;
 import com.personyze.androidsdk.PersonyzeResult;
 import com.personyze.androidsdk.PersonyzeTracker;
-import com.personyze.androidsdk.PersonyzeError;
 
 import java.util.ArrayList;
 
@@ -171,13 +176,14 @@ public class DemoActivity extends AppCompatActivity
 
 	/// You clicked "Clear cache".
 	public void clickedClearCache(View view)
-	{	try
-		{	// I call tracker API
-			PersonyzeTracker.inst.clearCache(this);
-		}
-		catch (PersonyzeError error)
-		{	Toast.makeText(this, error.getLocalizedMessage(), Toast.LENGTH_LONG).show();
-		}
+	{	// I call tracker API
+		PersonyzeTracker.inst.clearCache(this).addOnFailureListener
+		(	new OnFailureListener()
+			{	@Override public void onFailure(@NonNull Exception e)
+				{	Toast.makeText(DemoActivity.this, e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+				}
+			}
+		);
 	}
 
 	/// You clicked "Navigate to document".
@@ -322,35 +328,35 @@ public class DemoActivity extends AppCompatActivity
 		// Start loading
 		findViewById(R.id.loading).setVisibility(View.VISIBLE);
 		findViewById(R.id.buttonNav).setVisibility(View.GONE);
-		PersonyzeTracker.inst.getResult
-		(	this,
-			new PersonyzeTracker.AsyncResult<PersonyzeResult>()
-			{	@Override public void success(PersonyzeResult result)
-				{	// Loaded successfully
-					findViewById(R.id.loading).setVisibility(View.GONE);
-					findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
-					// Save the result to personyzeResult to use it later
-					personyzeResult = result;
-					// Present the conditions/actions table
-					ArrayList<ResultRow> rows = new ArrayList<>();
-					rows.add(new ResultRow("**"+result.conditions.size()+" conditions**", false));
-					for (PersonyzeCondition item : result.conditions)
-					{   rows.add(new ResultRow(item.getName(), false));
+		PersonyzeTracker.inst.getResult(this).addOnCompleteListener
+		(	new OnCompleteListener<PersonyzeResult>()
+			{	@Override public void onComplete(@NonNull Task<PersonyzeResult> task)
+				{	if (task.isSuccessful())
+					{	// Loaded successfully
+						findViewById(R.id.loading).setVisibility(View.GONE);
+						findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
+						// Save the result to personyzeResult to use it later
+						personyzeResult = task.getResult();
+						// Present the conditions/actions table
+						ArrayList<ResultRow> rows = new ArrayList<>();
+						rows.add(new ResultRow("**"+personyzeResult.conditions.size()+" conditions**", false));
+						for (PersonyzeCondition item : personyzeResult.conditions)
+						{   rows.add(new ResultRow(item.getName(), false));
+						}
+						rows.add(new ResultRow("**"+personyzeResult.actions.size()+" actions**", false));
+						for (PersonyzeAction item : personyzeResult.actions)
+						{   rows.add(new ResultRow((item.getName()) + " ("+item.getContentType()+")", true));
+						}
+						setResultRows(rows);
 					}
-					rows.add(new ResultRow("**"+result.actions.size()+" actions**", false));
-					for (PersonyzeAction item : result.actions)
-					{   rows.add(new ResultRow((item.getName()) + " ("+item.getContentType()+")", true));
+					else
+					{	// Error with the requested things
+						findViewById(R.id.loading).setVisibility(View.GONE);
+						findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
+						// Present red error text
+						((TextView)findViewById(R.id.textError)).setText(task.getException().getLocalizedMessage());
+						findViewById(R.id.textError).setVisibility(View.VISIBLE);
 					}
-					setResultRows(rows);
-				}
-
-				@Override public void error(PersonyzeError error)
-				{	// Error with the requested things
-					findViewById(R.id.loading).setVisibility(View.GONE);
-					findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
-					// Present red error text
-					((TextView)findViewById(R.id.textError)).setText(error.getLocalizedMessage());
-					findViewById(R.id.textError).setVisibility(View.VISIBLE);
 				}
 			}
 		);
