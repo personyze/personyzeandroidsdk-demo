@@ -6,16 +6,16 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
-import java.util.zip.CRC32;
 
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
-import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
@@ -170,13 +170,6 @@ public class PersonyzeTracker
 			editor.putString("Past Sessions", value);
 			editor.apply();
 		}
-	}
-
-	private static int getUserId(Context context)
-	{   String androidId = Settings.Secure.getString(context.getApplicationContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-		CRC32 crc = new CRC32();
-		crc.update(androidId.getBytes());
-		return (int)crc.getValue();
 	}
 
 	protected static int intVal(String str)
@@ -370,7 +363,7 @@ public class PersonyzeTracker
 									{	action.dataToStorage(context);
 									}
 									catch (IOException e)
-									{	Log.e("Personyze", e.getLocalizedMessage());
+									{	Log.e("Personyze", Objects.requireNonNull(e.getLocalizedMessage()));
 									}
 								}
 								else
@@ -674,7 +667,6 @@ public class PersonyzeTracker
 		{	if (context == null)
 			{	throw new PersonyzeError("No context given");
 			}
-			userId = getUserId(context);
 			http.setContext(context);
 			storage = context.getSharedPreferences("Personyze Tracker", Context.MODE_PRIVATE);
 			timeZone = TimeZone.getDefault().getRawOffset() / (60*60*1000.0);
@@ -695,6 +687,15 @@ public class PersonyzeTracker
 			apiKeyHash = http.apiKey.hashCode();
 			personyzeResult = null;
 			// restore current state
+			userId = storage.getInt("User ID", 0);
+			if (userId == 0)
+			{	while (userId == 0)
+				{	userId = new Random().nextInt();
+				}
+				SharedPreferences.Editor editor = storage.edit();
+				editor.putInt("User ID", userId);
+				editor.apply();
+			}
 			wantNewSession = storage.getBoolean("New Session", false);
 			sessionId = storage.getString("User", null);
 			cacheVersion = storage.getInt("Cache Version", 0);
@@ -970,6 +971,7 @@ public class PersonyzeTracker
 				SharedPreferences.Editor editor = storage.edit();
 				editor.clear();
 				// the following settings don't depend on cacheVersion
+				editor.putInt("User ID", userId);
 				editor.putInt("Api Key Hash", apiKeyHash);
 				if (wantNewSession)
 				{	editor.putBoolean("New Session", true);
