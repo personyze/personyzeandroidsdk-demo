@@ -76,7 +76,7 @@ public class DemoActivity extends AppCompatActivity
 	public static final String EXTRA_ACTION = "com.personyze.androidsdkdemo.ACTION";
 
 	private View.OnClickListener clickedShowAction;
-	private ArrayList<Event> events = new ArrayList<>();
+	private final ArrayList<Event> events = new ArrayList<>();
 	private PersonyzeResult personyzeResult;
 
 	/// This method is called by Android, when he starts my activity.
@@ -156,7 +156,7 @@ public class DemoActivity extends AppCompatActivity
 
 	/// This method is called by Android, when he (temporarily?) shuts down this activity.
 	/// @param outState - I will restore the current state from this object in onCreate().
-	@Override protected void onSaveInstanceState(Bundle outState)
+	@Override protected void onSaveInstanceState(@NonNull Bundle outState)
 	{	super.onSaveInstanceState(outState);
 		outState.putString("editNav", ((EditText)findViewById(R.id.editNav)).getText().toString());
 		outState.putInt("spinnerUserField", ((Spinner)findViewById(R.id.spinnerUserField)).getSelectedItemPosition());
@@ -331,7 +331,7 @@ public class DemoActivity extends AppCompatActivity
 		PersonyzeTracker.inst.getResult(this).addOnCompleteListener
 		(	new OnCompleteListener<PersonyzeResult>()
 			{	@Override public void onComplete(@NonNull Task<PersonyzeResult> task)
-				{	if (task.isSuccessful())
+				{	if (task.getException() == null)
 					{	// Loaded successfully
 						findViewById(R.id.loading).setVisibility(View.GONE);
 						findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);

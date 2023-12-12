@@ -7,6 +7,8 @@ import android.os.Looper;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
+import androidx.annotation.NonNull;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -38,7 +40,7 @@ public class PersonyzeAction implements Serializable
 	String libsApp;
 	ArrayList<PersonyzePlaceholder> placeholders;
 
-	public class Clicked
+	public static class Clicked
 	{	public int actionId;
 		public String href;
 		public String status;
@@ -105,7 +107,9 @@ public class PersonyzeAction implements Serializable
 	void dataToStorage(Context context) throws IOException
 	{	File file = new File(context.getCacheDir(), "Personyze Action Data "+id);
 		if (data != null)
-		{	new ObjectOutputStream(new FileOutputStream(file)).writeObject(data);
+		{	try (FileOutputStream s = new FileOutputStream(file))
+			{	new ObjectOutputStream(s).writeObject(data);
+			}
 		}
 		else if (file.exists() && !file.delete())
 		{	throw new IOException("Couldn't delete file");
@@ -124,11 +128,11 @@ public class PersonyzeAction implements Serializable
 	{	return id;
 	}
 
-	public String getName()
+	public @NonNull String getName()
 	{	return name==null ? "" : name;
 	}
 
-	public String getContentType()
+	public @NonNull String getContentType()
 	{	return contentType==null ? "" : contentType;
 	}
 
