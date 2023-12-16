@@ -72,14 +72,12 @@ public class ActionActivity extends AppCompatActivity
 				action.renderOnWebView
 				(	this,
 					webView,
-					new PersonyzeTracker.Callback<PersonyzeAction.Clicked>()
-					{	@Override public void callback(final PersonyzeAction.Clicked clicked)
-						{	// Got event. This means that you clicked some sensitive region
-							// I report this event to Personyze. So there will be CTR and close-rate statistics, and widget contribution rate (products bought from this action)
-							PersonyzeTracker.inst.reportActionClicked(ActionActivity.this, clicked);
-							// Also i show the event on screen
-							((TextView)findViewById(R.id.textStatus)).setText(String.format("clicked=%s; arg=%s; href=%s", clicked.status, clicked.arg, clicked.href));
-						}
+					clicked ->
+					{	// Got event. This means that you clicked some sensitive region
+						// I report this event to Personyze. So there will be CTR and close-rate statistics, and widget contribution rate (products bought from this action)
+						PersonyzeTracker.inst.reportActionClicked(ActionActivity.this, clicked);
+						// Also i show the event on screen
+						((TextView)findViewById(R.id.textStatus)).setText(String.format("clicked=%s; arg=%s; href=%s", clicked.status, clicked.arg, clicked.href));
 					}
 				);
 			}
