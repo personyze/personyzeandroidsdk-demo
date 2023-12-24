@@ -19,17 +19,10 @@ import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 
 public class PersonyzeHttp
-{	private final String GATEWAY_URL;
-	private final String USER_AGENT;
-	private RequestQueue requestQueue;
+{	private RequestQueue requestQueue;
 	private String httpAuth;
 	private String apiKeyInUse;
 	public String apiKey;
-
-	PersonyzeHttp(String GATEWAY_URL, String USER_AGENT)
-	{	this.GATEWAY_URL = GATEWAY_URL;
-		this.USER_AGENT = USER_AGENT;
-	}
 
 	public void setContext(Context context)
 	{	requestQueue = Volley.newRequestQueue(context);
@@ -58,7 +51,7 @@ public class PersonyzeHttp
 			requestQueue.add
 			(	new StringRequest
 				(	postData==null ? Request.Method.GET : Request.Method.POST,
-					GATEWAY_URL+path,
+					PersonyzeTracker.GATEWAY_URL+path,
 					new Response.Listener<String>()
 					{	@Override public void onResponse(String response)
 						{	if (response!=null && response.length()>0)
@@ -121,7 +114,7 @@ public class PersonyzeHttp
 					@Override public Map<String, String> getHeaders()
 					{	HashMap<String, String> params = new HashMap<>();
 						params.put("Authorization", httpAuth);
-						params.put("User-Agent", USER_AGENT);
+						params.put("User-Agent", PersonyzeTracker.USER_AGENT);
 						return params;
 					}
 				}

@@ -51,11 +51,11 @@ import org.json.JSONTokener;
  * </p>
  */
 public class PersonyzeTracker
-{	private static final String GATEWAY_URL = "https://app.personyze.com/rest/";
+{	static final String GATEWAY_URL = "https://app.personyze.com/rest/";
 	static final String WEB_VIEW_LIB_URL = "https://counter.personyze.com/web-view.js";
 	static final String LIBS_URL = "https://counter.personyze.com/actions/webkit/";
 	static final String WEBVIEW_BASE_URL = "https://counter.personyze.com/";
-	private static final String USER_AGENT = "Personyze Android SDK/1.0";
+	static final String USER_AGENT = "Personyze Android SDK/1.0";
 	private static final String PLATFORM = "Android";
 	private static final int POST_LIMIT = 50000;
 	private static final int REMEMBER_PAST_SESSIONS = 12;
@@ -65,7 +65,7 @@ public class PersonyzeTracker
 	}
 
 	private int userId;
-	private final PersonyzeHttp http = new PersonyzeHttp(GATEWAY_URL, USER_AGENT);
+	private final PersonyzeHttp http = new PersonyzeHttp();
 	private SharedPreferences storage;
 	private double timeZone;
 	private String language;
