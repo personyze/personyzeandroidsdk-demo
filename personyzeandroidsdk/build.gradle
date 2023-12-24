@@ -1,15 +1,17 @@
+plugins {
+    id 'com.android.library' version '8.2.0' apply false
+}
+
 apply plugin: 'com.android.library'
 
 android {
     namespace 'com.personyze.personyzeandroidsdk'
 
-    compileSdk 33
-
-
+    compileSdk 34
 
     defaultConfig {
         minSdkVersion 15
-        targetSdkVersion 33
+        targetSdkVersion 34
     }
 
     buildTypes {
@@ -23,6 +25,6 @@ android {
 
 dependencies {
     implementation 'com.android.volley:volley:1.2.1'
-    implementation 'androidx.annotation:annotation:1.7.0'
+    implementation 'androidx.annotation:annotation:1.7.1'
     implementation 'com.google.android.gms:play-services-tasks:18.0.2'
 }
