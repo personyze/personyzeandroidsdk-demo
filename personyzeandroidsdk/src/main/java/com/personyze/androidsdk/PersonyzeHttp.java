@@ -35,7 +35,15 @@ public class PersonyzeHttp
 	{	requestQueue = Volley.newRequestQueue(context);
 	}
 
-	public Task<String> fetch(String path, final String postData)
+	public Task<String> get(String path)
+	{	return fetch(path, null);
+	}
+
+	public Task<String> post(String path, final String postData)
+	{	return fetch(path, postData);
+	}
+
+	private Task<String> fetch(String path, final String postData)
 	{	final TaskCompletionSource<String> asyncResult = new TaskCompletionSource<>();
 		if (apiKey != null)
 		{	if (!apiKey.equals(apiKeyInUse))

@@ -284,7 +284,7 @@ public class PersonyzeTracker
 					return asyncResult.getTask();
 				}
 				// Send the request
-				return http.fetch("tracker-v1", postStr).continueWithTask
+				return http.post("tracker-v1", postStr).continueWithTask
 				(	task2 ->
 					{	try
 						{	if (task2.getException() != null)
@@ -329,7 +329,7 @@ public class PersonyzeTracker
 							}
 							// newPersonyzeResult.conditions
 							newPersonyzeResult.conditions = new ArrayList<>(rConditions.length());
-							for (int i=0, i_end=rConditions.length(); i<i_end; i++)
+							for (int i=0, iEnd=rConditions.length(); i<iEnd; i++)
 							{	object = rConditions.getJSONObject(i);
 								PersonyzeCondition condition = new PersonyzeCondition(object.getInt("id"));
 								if (!wantClearCache && !condition.fromStorage(storage))
@@ -339,7 +339,7 @@ public class PersonyzeTracker
 							}
 							// newPersonyzeResult.actions
 							newPersonyzeResult.actions = new ArrayList<>(rActions.length());
-							for (int i=0, i_end=rActions.length(); i<i_end; i++)
+							for (int i=0, iEnd=rActions.length(); i<iEnd; i++)
 							{	object = rActions.getJSONObject(i);
 								int id = object.getInt("id");
 								if (!blockedActions.containsKey(id))
@@ -373,12 +373,12 @@ public class PersonyzeTracker
 							}
 							// dismissConditions
 							int[] dismissConditions = new int[rDismissConditions.length()];
-							for (int i=0, i_end=rDismissConditions.length(); i<i_end; i++)
+							for (int i=0, iEnd=rDismissConditions.length(); i<iEnd; i++)
 							{	dismissConditions[i] = rDismissConditions.getInt(i);
 							}
 							// dismissActions
 							int[] dismissActions = new int[rDismissActions.length()];
-							for (int i=0, i_end=rDismissActions.length(); i<i_end; i++)
+							for (int i=0, iEnd=rDismissActions.length(); i<iEnd; i++)
 							{	dismissActions[i] = rDismissActions.getInt(i);
 							}
 							// done
@@ -452,14 +452,14 @@ public class PersonyzeTracker
 					delim = ',';
 				}
 			}
-			loadConditionsTask = http.fetch(sb.toString(), null).continueWith
+			loadConditionsTask = http.get(sb.toString()).continueWith
 			(	task ->
 				{	try
 					{	if (task.getException() != null)
 						{	throw task.getException();
 						}
 						JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
-						for (int i=0, i_end=array.length(); i<i_end; i++)
+						for (int i=0, iEnd=array.length(); i<iEnd; i++)
 						{	JSONObject row = array.getJSONObject(i);
 							int id = row.getInt("id");
 							String name = row.getString("name");
@@ -495,7 +495,7 @@ public class PersonyzeTracker
 					delim = ',';
 				}
 			}
-			loadActionsTask = http.fetch(sb.toString(), null).continueWithTask
+			loadActionsTask = http.get(sb.toString()).continueWithTask
 			(	task ->
 				{	try
 					{	if (task.getException() != null)
@@ -503,7 +503,7 @@ public class PersonyzeTracker
 						}
 						StringBuilder loadPlaceholders = null;
 						JSONArray array = (JSONArray)new JSONTokener(task.getResult()).nextValue();
-						for (int i=0, i_end=array.length(); i<i_end; i++)
+						for (int i=0, iEnd=array.length(); i<iEnd; i++)
 						{	JSONObject row = array.getJSONObject(i);
 							int id = row.getInt("id");
 							String name = row.getString("name");
@@ -543,14 +543,14 @@ public class PersonyzeTracker
 							}
 						}
 						if (loadPlaceholders != null)
-						{	return http.fetch(loadPlaceholders.toString(), null).continueWith
+						{	return http.get(loadPlaceholders.toString()).continueWith
 							(	task2 ->
 								{	try
 									{	if (task2.getException() != null)
 										{	throw task2.getException();
 										}
 										JSONArray array2 = (JSONArray)new JSONTokener(task2.getResult()).nextValue();
-										for (int i=0, i_end=array2.length(); i<i_end; i++)
+										for (int i=0, iEnd=array2.length(); i<iEnd; i++)
 										{	JSONObject row = array2.getJSONObject(i);
 											int id = row.getInt("id");
 											String name = row.getString("name");
