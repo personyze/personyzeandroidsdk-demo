@@ -10,14 +10,28 @@ import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
+import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
@@ -36,7 +50,7 @@ import org.json.JSONTokener;
  * <p>
  *     The first thing you probably want to do is {@link #navigate(String)} to some "document".
  *     The Document is abstract entity in your application. For example there can be a Home page, a Category page,
- *     a Product page, a Checkout page, and so. You can use activity names as document names.
+ *     a Product page, a Checkout page, and so on. You can use activity names as document names.
  * </p>
  * <p>
  *     See the methods of this object to full list of available operations.
@@ -56,21 +70,27 @@ public class PersonyzeTracker
 	static final String LIBS_URL = "https://counter.personyze.com/actions/webkit/";
 	static final String WEBVIEW_BASE_URL = "https://counter.personyze.com/";
 	static final String USER_AGENT = "Personyze Android SDK/1.0";
+	static final String NOTI_CHANNEL_ID = "Personyze Notifications";
+	private static final String NOTI_CHANNEL_NAME = "Recommendations";
+	private static  final int NOTI_ID = 1839852125; // random number
 	private static final String PLATFORM = "Android";
 	private static final int POST_LIMIT = 50000;
 	private static final int REMEMBER_PAST_SESSIONS = 12;
+	private static final long PERIODIC_INTERVAL_MILLIS = PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS;
 
 	enum Rejected
 	{	DONT_SHOW_AGAIN, PRESENTING_RULES
 	}
 
 	private int userId;
-	private final PersonyzeHttp http = new PersonyzeHttp();
+	final PersonyzeHttp http = new PersonyzeHttp();
 	private SharedPreferences storage;
 	private double timeZone;
 	private String language;
 	private String os;
 	private String deviceType;
+	private boolean notiEnabled;
+	private long notiLastCheckTime;
 	private final ArrayList<String[]> commands = new ArrayList<>(8);
 	private boolean isNavigate;
 	private boolean wantNewSession;
@@ -237,6 +257,7 @@ public class PersonyzeTracker
 						postJson.key("screen").value(String.format(Locale.US, "%dx%d", m.widthPixels, m.heightPixels));
 						postJson.key("os").value(os);
 						postJson.key("device_type").value(deviceType);
+						postJson.key("noti_enabled").value(notiEnabled);
 						postJson.key("commands").array();
 						for (String[] command : commands)
 						{	postJson.array();
@@ -698,6 +719,7 @@ public class PersonyzeTracker
 			}
 			wantNewSession = storage.getBoolean("New Session", false);
 			sessionId = storage.getString("User", null);
+			notiLastCheckTime = storage.getLong("Noti Last Check Time", 0);
 			cacheVersion = storage.getInt("Cache Version", 0);
 			if (storage.getInt("Api Key Hash", 0) != apiKeyHash)
 			{	clearCache(context); // delete cached conditions and actions from (possible) different account
@@ -718,12 +740,44 @@ public class PersonyzeTracker
 
 	/**
 	 * Initialize the tracker. This is required before calling any other methods. Typically you need to call this once. Second call with the same apiKey will do nothing.
+	 * This method doesn't start or stop notification service. Use {@link #initialize(Context, String, boolean)} with 3rd argument true if you want to receive notifications.
+	 * @param context The context of your application (usually an Activity).
 	 * @param apiKey Your personal secret key, obtained in the Personyze account.
 	 */
-	public synchronized void initialize(String apiKey)
+	public synchronized void initialize(Context context, String apiKey)
+	{	initialize(context, apiKey, notiEnabled);
+	}
+
+	/**
+	 * Initialize the tracker. This is required before calling any other methods. Typically you need to call this once. Second call with the same apiKey will do nothing.
+	 * @param context The context of your application (usually an Activity).
+	 * @param apiKey Your personal secret key, obtained in the Personyze account.
+	 * @param notiEnabled If true, will register to receive notifications from Personyze. You need to receive system "after reboot" broadcast, and call {@link #initialize(Context, String, boolean)}. Since then notifications can arrive. If notiEnabled is false, the notification service will be deregistered.
+	 */
+	public synchronized void initialize(Context context, String apiKey, boolean notiEnabled)
 	{	if (http.apiKey==null || !http.apiKey.equals(apiKey))
 		{	queryingResults = null;
 			http.apiKey = apiKey;
+		}
+		if (notiEnabled != this.notiEnabled)
+		{	this.notiEnabled = notiEnabled;
+			if (notiEnabled)
+			{	// Register service
+				PeriodicWorkRequest notificationWorker =
+				(	new PeriodicWorkRequest.Builder
+					(	PersonyzeNotificationWorker.class,
+						PERIODIC_INTERVAL_MILLIS,
+						TimeUnit.MILLISECONDS
+					).setConstraints
+					(	new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+					).build()
+				);
+				WorkManager.getInstance(context.getApplicationContext()).enqueueUniquePeriodicWork("Personyze Notification Worker", ExistingPeriodicWorkPolicy.KEEP, notificationWorker);
+			}
+			else
+			{	// Deregister service
+				WorkManager.getInstance(context.getApplicationContext()).cancelUniqueWork("Personyze Notification Worker");
+			}
 		}
 	}
 
@@ -979,6 +1033,9 @@ public class PersonyzeTracker
 				if (sessionId != null)
 				{	editor.putString("User", sessionId);
 				}
+				if (notiLastCheckTime != 0)
+				{	editor.putLong("Noti Last Check Time", notiLastCheckTime);
+				}
 				if (cacheVersion != 0)
 				{	editor.putInt("Cache Version", cacheVersion);
 				}
@@ -1000,5 +1057,85 @@ public class PersonyzeTracker
 				return null;
 			}
 		);
+	}
+
+	public Task<Void> checkForNotification(Context context)
+	{	return checkForNotification(context, true);
+	}
+
+	Task<Void> checkForNotification(Context context, boolean evenIfAlreadyCheckedRecently)
+	{	if (http.apiKey == null)
+		{	final TaskCompletionSource<Void> asyncResult = new TaskCompletionSource<>();
+			asyncResult.setException(new PersonyzeError("Not initialized"));
+			return asyncResult.getTask();
+		}
+		if (!notiEnabled || ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+		{	final TaskCompletionSource<Void> asyncResult = new TaskCompletionSource<>();
+			asyncResult.setResult(null);
+			return asyncResult.getTask();
+		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+		{	context.getSystemService(NotificationManager.class).createNotificationChannel
+			(	new NotificationChannel
+				(	NOTI_CHANNEL_ID,
+					NOTI_CHANNEL_NAME,
+					NotificationManager.IMPORTANCE_DEFAULT
+				)
+			);
+		}
+		queryingResults = doInitialize(context).continueWithTask
+		(	task ->
+			{	if (task.getException() != null)
+				{	throw task.getException();
+				}
+				long now = System.currentTimeMillis();
+				if (sessionId == null || notiLastCheckTime+(evenIfAlreadyCheckedRecently ? 1000 : PERIODIC_INTERVAL_MILLIS) >= now)
+				{	final TaskCompletionSource<PersonyzeResult> asyncResult2 = new TaskCompletionSource<>();
+					asyncResult2.setResult(personyzeResult);
+					return asyncResult2.getTask();
+				}
+				notiLastCheckTime = now;
+				SharedPreferences.Editor editor = storage.edit();
+				editor.putLong("Noti Last Check Time", notiLastCheckTime);
+				editor.apply();
+				return http.get("current_notification/where/user_id="+userId+"&session_id="+sessionId).continueWithTask
+				(	task2 ->
+					{	if (task2.getException() != null)
+						{	throw task2.getException();
+						}
+						String json = task2.getResult();
+						if (json.equals("null"))
+						{	final TaskCompletionSource<PersonyzeResult> asyncResult2 = new TaskCompletionSource<>();
+							asyncResult2.setResult(personyzeResult);
+							return asyncResult2.getTask();
+						}
+						PersonyzeNotification personyzeNoti = new PersonyzeNotification(json);
+						return personyzeNoti.toNotification(context).continueWithTask
+						(	task3 ->
+							{	if (task3.getException() != null)
+								{	throw task3.getException();
+								}
+								Notification noti = task3.getResult();
+								// Clear the notification on Personyze server
+								return http.delete("current_notification/where/user_id="+userId+"&session_id="+sessionId+"&message_id="+personyzeNoti.messageId).continueWith
+								(	task4 ->
+									{	if (task4.getException() != null)
+										{	throw task4.getException();
+										}
+										String rowsAffected = task4.getResult();
+										if (!rowsAffected.equals("0") && !rowsAffected.equals("1"))
+										{	throw new PersonyzeError("Couldn't deliver the notification");
+										}
+										NotificationManagerCompat.from(context).notify(NOTI_CHANNEL_ID, NOTI_ID, noti);
+										return personyzeResult;
+									}
+								);
+							}
+						);
+					}
+				);
+			}
+		);
+		return queryingResults.continueWith(task -> null);
 	}
 }

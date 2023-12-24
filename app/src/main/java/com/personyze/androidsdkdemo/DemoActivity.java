@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.util.TypedValue;
+import android.util.Log;import android.util.TypedValue;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -28,7 +28,7 @@ import com.personyze.androidsdk.PersonyzeCondition;
 import com.personyze.androidsdk.PersonyzeResult;
 import com.personyze.androidsdk.PersonyzeTracker;
 
-import java.util.ArrayList;
+import java.util.ArrayList;import java.util.Objects;
 
 /// This is "Demo" screen where you can test various API calls
 public class DemoActivity extends AppCompatActivity
@@ -103,7 +103,12 @@ public class DemoActivity extends AppCompatActivity
 		final String apiKey = getIntent().getStringExtra(MainActivity.EXTRA_API_KEY);
 
 		// Initialize the Personyze tracker. We need to do this before calling other PersonyzeTracker.inst.* methods.
-		PersonyzeTracker.inst.initialize(apiKey);
+		PersonyzeTracker.inst.initialize(this, apiKey, true);
+		PersonyzeTracker.inst.checkForNotification(this).addOnFailureListener
+		(	error ->
+			{	Log.e("Personyze", Objects.requireNonNull(error.getLocalizedMessage()));
+			}
+		);
 
 		// spinnerUserField
 		final Spinner spinnerUserField = findViewById(R.id.spinnerUserField);

@@ -48,7 +48,7 @@ public class ActionActivity extends AppCompatActivity
 
 			// Initialize the Personyze tracker. We need to do this before calling other PersonyzeTracker.inst.* methods.
 			// It doesn't hurt calling the initializer several times.
-			PersonyzeTracker.inst.initialize(apiKey);
+			PersonyzeTracker.inst.initialize(this, apiKey, true);
 
 			// Save html to file to find it in debugger. You can see what exactly Personyze is presenting in webView
 			try
