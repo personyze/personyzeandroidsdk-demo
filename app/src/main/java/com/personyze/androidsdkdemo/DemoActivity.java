@@ -183,11 +183,7 @@ public class DemoActivity extends AppCompatActivity
 	public void clickedClearCache(View view)
 	{	// I call tracker API
 		PersonyzeTracker.inst.clearCache(this).addOnFailureListener
-		(	new OnFailureListener()
-			{	@Override public void onFailure(@NonNull Exception e)
-				{	Toast.makeText(DemoActivity.this, e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
-				}
-			}
+		(	e-> Toast.makeText(DemoActivity.this, e.getLocalizedMessage(), Toast.LENGTH_LONG).show()
 		);
 	}
 
@@ -334,34 +330,32 @@ public class DemoActivity extends AppCompatActivity
 		findViewById(R.id.loading).setVisibility(View.VISIBLE);
 		findViewById(R.id.buttonNav).setVisibility(View.GONE);
 		PersonyzeTracker.inst.getResult(this).addOnCompleteListener
-		(	new OnCompleteListener<PersonyzeResult>()
-			{	@Override public void onComplete(@NonNull Task<PersonyzeResult> task)
-				{	if (task.getException() == null)
-					{	// Loaded successfully
-						findViewById(R.id.loading).setVisibility(View.GONE);
-						findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
-						// Save the result to personyzeResult to use it later
-						personyzeResult = task.getResult();
-						// Present the conditions/actions table
-						ArrayList<ResultRow> rows = new ArrayList<>();
-						rows.add(new ResultRow("**"+personyzeResult.conditions.size()+" conditions**", false));
-						for (PersonyzeCondition item : personyzeResult.conditions)
-						{   rows.add(new ResultRow(item.getName(), false));
-						}
-						rows.add(new ResultRow("**"+personyzeResult.actions.size()+" actions**", false));
-						for (PersonyzeAction item : personyzeResult.actions)
-						{   rows.add(new ResultRow((item.getName()) + " ("+item.getContentType()+")", true));
-						}
-						setResultRows(rows);
+		(	task->
+			{	if (task.getException() == null)
+				{	// Loaded successfully
+					findViewById(R.id.loading).setVisibility(View.GONE);
+					findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
+					// Save the result to personyzeResult to use it later
+					personyzeResult = task.getResult();
+					// Present the conditions/actions table
+					ArrayList<ResultRow> rows = new ArrayList<>();
+					rows.add(new ResultRow("**"+personyzeResult.conditions.size()+" conditions**", false));
+					for (PersonyzeCondition item : personyzeResult.conditions)
+					{   rows.add(new ResultRow(item.getName(), false));
 					}
-					else
-					{	// Error with the requested things
-						findViewById(R.id.loading).setVisibility(View.GONE);
-						findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
-						// Present red error text
-						((TextView)findViewById(R.id.textError)).setText(task.getException().getLocalizedMessage());
-						findViewById(R.id.textError).setVisibility(View.VISIBLE);
+					rows.add(new ResultRow("**"+personyzeResult.actions.size()+" actions**", false));
+					for (PersonyzeAction item : personyzeResult.actions)
+					{   rows.add(new ResultRow((item.getName()) + " ("+item.getContentType()+")", true));
 					}
+					setResultRows(rows);
+				}
+				else
+				{	// Error with the requested things
+					findViewById(R.id.loading).setVisibility(View.GONE);
+					findViewById(R.id.buttonNav).setVisibility(View.VISIBLE);
+					// Present red error text
+					((TextView)findViewById(R.id.textError)).setText(task.getException().getLocalizedMessage());
+					findViewById(R.id.textError).setVisibility(View.VISIBLE);
 				}
 			}
 		);
