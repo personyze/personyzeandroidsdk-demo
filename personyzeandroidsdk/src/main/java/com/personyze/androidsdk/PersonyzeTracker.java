@@ -753,7 +753,7 @@ public class PersonyzeTracker
 	 * Initialize the tracker. This is required before calling any other methods. Typically you need to call this once. Second call with the same apiKey will do nothing.
 	 * @param context The context of your application (usually an Activity).
 	 * @param apiKey Your personal secret key, obtained in the Personyze account.
-	 * @param notiEnabled If true, will register to receive notifications from Personyze. You need to receive system "after reboot" broadcast, and call {@link #initialize(Context, String, boolean)}. Since then notifications can arrive. If notiEnabled is false, the notification service will be deregistered.
+	 * @param notiEnabled If true, will register to receive notifications from Personyze. The registered service will run on the background, and automatically restart after device reboot. If notiEnabled is set to false, the notification service will be deregistered.
 	 */
 	public synchronized void initialize(Context context, String apiKey, boolean notiEnabled)
 	{	if (http.apiKey==null || !http.apiKey.equals(apiKey))
