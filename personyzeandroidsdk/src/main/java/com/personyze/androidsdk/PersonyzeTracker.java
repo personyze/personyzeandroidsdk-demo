@@ -1,6 +1,7 @@
 package com.personyze.androidsdk;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -1098,7 +1099,7 @@ public class PersonyzeTracker
 				SharedPreferences.Editor editor = storage.edit();
 				editor.putLong("Noti Last Check Time", notiLastCheckTime);
 				editor.apply();
-				return http.get("current_notification/where/user_id="+userId+"&session_id="+sessionId).continueWithTask
+				return http.get("current_notification/where/user_id="+userId+"&session_id="+restUriEncode(sessionId)).continueWithTask
 				(	task2 ->
 					{	if (task2.getException() != null)
 						{	throw task2.getException();
@@ -1117,7 +1118,7 @@ public class PersonyzeTracker
 								}
 								Notification noti = task3.getResult();
 								// Clear the notification on Personyze server
-								return http.delete("current_notification/where/user_id="+userId+"&session_id="+sessionId+"&message_id="+personyzeNoti.messageId).continueWith
+								return http.delete("current_notification/where/user_id="+userId+"&session_id="+restUriEncode(sessionId)+"&message_id="+personyzeNoti.messageId).continueWith
 								(	task4 ->
 									{	if (task4.getException() != null)
 										{	throw task4.getException();
@@ -1137,5 +1138,9 @@ public class PersonyzeTracker
 			}
 		);
 		return queryingResults.continueWith(task -> null);
+	}
+
+	String restUriEncode(String value)
+	{	return URLEncoder.encode(value.replace(",", "%2C")); // "," -> "%252C"
 	}
 }
