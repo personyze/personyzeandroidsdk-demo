@@ -1,10 +1,9 @@
-**/.directory
-*.iml
-.gradle
+.gradle/
+.kotlin/
+build/
 /local.properties
-/.idea
+/.idea/
+*.iml
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-README.md
+# Each tester's own Firebase project: see README.md, "Push"
+/app/google-services.json
