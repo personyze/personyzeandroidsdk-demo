@@ -4,7 +4,7 @@ Demo app for the [Personyze Android SDK](https://github.com/personyze/personyzea
 page views, see what Personyze decided, render an action and watch it report what the visitor does, receive
 notifications - checked for, or pushed through Firebase. **It writes to the real account: use a test account.**
 
-The demo of the 1.x SDK is in this repository's history, before the 2.1 commit.
+The demo of the 1.x SDK is on the `v1` branch.
 
 ## Run it
 
