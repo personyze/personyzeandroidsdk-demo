@@ -68,7 +68,7 @@ private fun App()
 	Scaffold(
 		topBar = {
 			Column {
-				TopAppBar(title = { Text("Personyze SDK 2.0 test") })
+				TopAppBar(title = { Text("Personyze SDK demo") })
 				PrimaryTabRow(selectedTabIndex = tab) {
 					TABS.forEachIndexed { i, title -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, maxLines = 1) }) }
 				}
