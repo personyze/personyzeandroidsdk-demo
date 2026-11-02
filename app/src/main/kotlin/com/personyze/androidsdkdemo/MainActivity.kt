@@ -56,6 +56,13 @@ class MainActivity : ComponentActivity()
 			}
 		}
 	}
+
+	/**	The push token asked for each time the app comes to the front, as the SDK's README asks: Firebase gives up on a
+		failed request until the app restarts, and asking again costs nothing once it has the token. **/
+	override fun onStart()
+	{	super.onStart()
+		Push.start(this)
+	}
 }
 
 private val TABS = listOf("Setup", "Demo", "Action", "Log", "Checks")

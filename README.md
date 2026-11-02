@@ -23,7 +23,7 @@ Maven Central instead.
 
 | Tab | |
 | --- | --- |
-| Setup | API key (Settings > Integrations > Full-featured API), base URL, timeout, notifications and the Android 13 permission, the push token; log in / log out (`setUserId`); the visitor and the session's fields |
+| Setup | API key (Settings > Integrations > Full-featured API), base URL, timeout, notifications and the Android 13 permission; push - the Firebase token, and where Personyze has the device (`Personyze.pushStatus`); log in / log out (`setUserId`); the visitor and the session's fields |
 | Demo | a screen and its events - profile fields, product and article statuses, cart and wishlist, promotions, a coupon, a raw `track()` - then Navigate / Events only / Refresh, new session, clear cache, reset, check notification; the campaigns and actions answered |
 | Action | one action rendered through Compose or the View, the last tap, manual reports, a JSON feed's rows, the content |
 | Log | the SDK's stored state (`diagnostics()`), `onError`, every request and response (bodies, never the key) |
@@ -42,7 +42,9 @@ check:
    `google-services.json` in `app/` (git ignores it: each tester's own project).
 2. In the Firebase console, Project settings > Service accounts > Generate new private key; upload that JSON in the
    Personyze panel, Integrations > App push, on the account the demo uses.
-3. Run the demo, turn notifications on and allow them (Setup). The Setup tab shows the token passed on.
+3. Run the demo, turn notifications on and allow them (Setup), and press Navigate (Demo) - the device registers
+   after the first request. The Setup tab shows the Firebase token and where Personyze has the device.
+4. In the panel, Integrations > App push counts the device; **Send a test notification** pushes one at once.
 
 `PushService.kt` is all an app adds: the token (`Personyze.setPushToken`) and the messages
 (`Personyze.handlePushMessage`). An emulator needs a Google Play system image to get a token.

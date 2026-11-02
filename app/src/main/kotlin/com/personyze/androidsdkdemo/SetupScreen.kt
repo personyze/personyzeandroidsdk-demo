@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.personyze.android.Personyze
+import com.personyze.android.PersonyzePushStatus
 
 @Composable
 fun SetupScreen()
@@ -67,7 +68,9 @@ fun SetupScreen()
 		)
 		Text(status, Modifier.padding(top = 6.dp))
 		val push by Push.state.collectAsState()
-		Text("Push: $push", Modifier.padding(top = 6.dp))
+		val pushStatus by Personyze.pushStatus.collectAsState()
+		Text("Firebase: $push", Modifier.padding(top = 6.dp))
+		Text("Personyze: " + pushWords(pushStatus), Modifier.padding(top = 6.dp))
 
 		Section("Visitor")
 		Field("Your user id (login)", userId, Modifier.fillMaxWidth()) { userId = it }
@@ -90,4 +93,12 @@ fun SetupScreen()
 fun sessionFields(session: String?): String
 {	val f = session?.split(' ').orEmpty()
 	return "start ${f.getOrNull(0)}, visitor ${f.getOrNull(1)}, counter ${f.getOrNull(3)}"
+}
+
+/**	Where push stands, from the SDK's own status (PersonyzePushStatus says what each state means). **/
+fun pushWords(s: PersonyzePushStatus): String = when
+{	s.token == null -> "no token passed on - notifications come when the app checks"
+	s.registeredVisitorId == null -> "token passed on, not registered yet (after the first request; or notifications are off)"
+	!s.pushed -> "registered for visitor ${s.registeredVisitorId}; the account has no Firebase key - checked, not pushed"
+	else -> "registered for visitor ${s.registeredVisitorId} - pushed at once"
 }
