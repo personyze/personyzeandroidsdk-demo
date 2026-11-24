@@ -19,7 +19,7 @@ android {
 		minSdk = 24
 		targetSdk = 36
 		versionCode = 1
-		versionName = "2.1.0"
+		versionName = "3.0.0"
 	}
 
 	buildTypes {
@@ -43,8 +43,8 @@ android {
 }
 
 dependencies {
-	implementation("com.personyze:personyze-android:2.1.0")
-	implementation("com.personyze:personyze-android-compose:2.1.0")
+	implementation("com.personyze:personyze-android:3.0.0")
+	implementation("com.personyze:personyze-android-compose:3.0.0")
 	implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
 	implementation("com.google.firebase:firebase-messaging")
 	implementation(platform("androidx.compose:compose-bom:2025.12.00"))
